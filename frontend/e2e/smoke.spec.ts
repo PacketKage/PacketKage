@@ -26,12 +26,22 @@ test('upload → analyze → alerts appear', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Analyze' })).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: 'Analyze' }).click()
 
-  // Analysis completes: the selected capture's status pill turns to completed
-  await expect(
-    page
-      .locator('.rounded-full', { hasText: 'completed' })
-      .first(),
-  ).toBeVisible({ timeout: 90_000 })
+  // SSE watcher delivered the terminal snapshot: the completion toast
+  // (never fired while the stream emitted invalid JSON). Checked first —
+  // toasts auto-dismiss, so don't wait on slower assertions before it.
+  await expect(page.getByText(/Analysis completed — \d[\d,]* packets/)).toBeVisible({ timeout: 30_000 })
+
+  // The DETAIL card must leave the analyzing state. The old assertion
+  // (any '.completed' pill on the page) matched the list row fed by polling
+  // and missed the SSE bug that pinned the card at "Analysis running…"
+  // forever while the backend had already finished.
+  await expect
+    .poll(async () => page.getByText('Analysis running…').count(), { timeout: 90_000 })
+    .toBe(0)
+
+  // The detail card's completed branch renders the summary stat grid —
+  // the "Packets" stat exists only there (list rows show lowercase text).
+  await expect(page.getByText('Packets', { exact: true })).toBeVisible({ timeout: 15_000 })
 
   // Alerts page shows the beaconing detection (rule card, not the incident banner)
   await page.getByRole('link', { name: 'Alerts' }).click()

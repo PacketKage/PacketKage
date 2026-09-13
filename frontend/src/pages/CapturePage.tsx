@@ -62,8 +62,14 @@ export function CapturePage() {
 
   // Selected capture status from the shared captures list (post-refresh source of truth)
   const captureRow = captures?.find((c) => c.id === selectedCapture?.id) ?? null
+  // The live job snapshot drives the in-progress display, but the polled DB
+  // row wins once it reaches a terminal state — if an SSE message is ever
+  // lost or malformed, the card self-heals on the next captures poll
+  // instead of staying pinned at "analyzing" forever.
+  const captureRowTerminal =
+    captureRow?.status === 'completed' || captureRow?.status === 'failed'
   const current =
-    liveJob && (liveJob.status === 'running' || liveJob.status === 'queued')
+    liveJob && (liveJob.status === 'running' || liveJob.status === 'queued') && !captureRowTerminal
       ? {
           ...(captureRow ?? selectedCapture ?? undefined),
           status: 'analyzing' as const,

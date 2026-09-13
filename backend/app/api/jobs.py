@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -54,7 +55,11 @@ async def job_events(job_id: str, poll_interval: float = 0.5):
                         yield f"event: error\ndata: {job_id} not found\n\n"
                         return
                     snapshot = _JobOut.model_validate(job).model_dump(mode="json")
-                    yield f"data: {snapshot}\n\n"
+                    # MUST be json.dumps — an f-string would emit Python dict
+                    # repr (single quotes), which JSON.parse rejects in the
+                    # browser, killing every SSE handler (regression-tested
+                    # in test_step1.py::test_job_events_stream_is_valid_json).
+                    yield f"data: {json.dumps(snapshot)}\n\n"
                     if job.status in TERMINAL:
                         terminal_sent = True
                         return

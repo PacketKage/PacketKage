@@ -146,10 +146,22 @@ def test_unknown_parser_rejected(client):
     assert "Unknown parser" in resp.json()["detail"]
 
 
-def test_tshark_parser_unavailable_graceful(client):
+def test_tshark_parser_unavailable_graceful(client, monkeypatch):
     capture_id = _upload(client, "normal_traffic.pcap")
+    # Force "tshark unavailable" regardless of the host env so the
+    # unavailable-parser path is deterministic (tshark IS installed on
+    # some dev machines, which made the old assumption flaky).
+    from app.parsers import registry as _registry
+
+    class _Unavailable:
+        name = "tshark"
+        description = "forced unavailable for test"
+
+        def available(self) -> bool:
+            return False
+
+    monkeypatch.setitem(_registry._parsers, "tshark", _Unavailable())  # noqa: SLF001
     resp = client.post(f"/api/captures/{capture_id}/analyze", json={"parser": "tshark"})
-    # tshark not installed in this env -> fast 400 with clear message
     assert resp.status_code == 400
     assert "not available" in resp.json()["detail"]
 
@@ -160,6 +172,53 @@ def test_jobs_listing(client):
     resp = client.get("/api/jobs")
     assert resp.status_code == 200
     assert any(j["status"] == "completed" for j in resp.json())
+
+
+def test_job_events_stream_is_valid_json(client):
+    """Regression: the SSE /events stream must emit parseable JSON snapshots.
+
+    An f-string over the model_dump dict once emitted Python dict repr
+    (single quotes, bare None) — JSON.parse rejected every event in the
+    browser, so job progress never reached the UI and captures appeared
+    stuck in 'analyzing' forever. This locks the wire format.
+    """
+    import json as _json
+
+    capture_id = _upload(client, "normal_traffic.pcap")
+    resp = client.post(f"/api/captures/{capture_id}/analyze")
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["id"]
+
+    # wait for the job to finish so the SSE stream (opened below) delivers
+    # a terminal snapshot immediately
+    deadline = time.time() + 30.0
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.1)
+    assert job["status"] == "completed", job
+
+    resp = client.get(f"/api/jobs/{job_id}/events")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+
+    # FastAPI's TestClient buffers the full SSE response; the stream closes
+    # itself after the terminal snapshot is sent.
+    body = resp.text
+    data_lines = [
+        line[len("data: "):] for line in body.splitlines() if line.startswith("data: ")
+    ]
+    assert data_lines, f"no SSE data events in response: {body!r}"
+
+    snapshots = []
+    for line in data_lines:
+        parsed = _json.loads(line)  # raises on Python-repr regression
+        snapshots.append(parsed)
+
+    assert snapshots[-1]["status"] == "completed"
+    assert snapshots[-1]["id"] == job_id
+    assert snapshots[-1]["progress"] == 100
 
 
 def test_scapy_parser_normalization_direct():
