@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db.orm import CaptureModel, CaseModel, TimelineEventModel
+from app.db.orm import CaptureModel, CaseModel
 from app.repositories import (
     AlertRepository,
     CaptureRepository,
@@ -43,40 +43,32 @@ def _case_detail(db: Session, case: CaseModel) -> CaseDetailOut:
         if c is not None:
             captures.append(c)
 
+    capture_ids = [c.id for c in captures]
+    # incidents belong to the capture, not per-alert
+    incidents = [inc for c in captures for inc in (c.summary or {}).get("incidents", [])]
+    # dedupe incidents across captures (same source + rule set)
+    seen: set[tuple] = set()
+    deduped: list = []
+    for inc in incidents:
+        key = (inc.get("source_ip"), tuple(inc.get("rule_names", [])))
+        if key not in seen:
+            seen.add(key)
+            deduped.append(inc)
+
+    first_ts, last_ts = TimelineRepository(db).ts_range_for_captures(capture_ids)
     stats: dict = {
         "capture_count": len(captures),
         "total_packets": sum(c.packet_count for c in captures),
         "total_alerts": 0,
         "alerts_by_severity": {},
-        "incidents": [],
-        "first_event_ts": None,
-        "last_event_ts": None,
+        "incidents": sorted(deduped, key=lambda i: -i.get("max_score", 0))[:20],
+        "first_event_ts": first_ts,
+        "last_event_ts": last_ts,
     }
-    events: list[TimelineEventModel] = []
-    for c in captures:
-        alerts, total = AlertRepository(db).page_for_capture(c.id, limit=500)
-        stats["total_alerts"] += total
-        for a in alerts:
-            sev = a.severity
-            stats["alerts_by_severity"][sev] = stats["alerts_by_severity"].get(sev, 0) + 1
-        # incidents belong to the capture, not per-alert (extending inside the
-        # alert loop duplicated them once per alert before the dedupe masked it)
-        stats["incidents"].extend(c.summary.get("incidents", []) if c.summary else [])
-        events.extend(TimelineRepository(db).list_for_capture(c.id))
-
-    # dedupe incidents across captures (same source + rule set)
-    seen: set[tuple] = set()
-    deduped: list = []
-    for inc in stats["incidents"]:
-        key = (inc.get("source_ip"), tuple(inc.get("rule_names", [])))
-        if key not in seen:
-            seen.add(key)
-            deduped.append(inc)
-    stats["incidents"] = sorted(deduped, key=lambda i: -i.get("max_score", 0))[:20]
-
-    if events:
-        stats["first_event_ts"] = min(e.timestamp for e in events)
-        stats["last_event_ts"] = max(e.timestamp for e in events)
+    if capture_ids:
+        by_sev = AlertRepository(db).count_by_severity(capture_ids)
+        stats["alerts_by_severity"] = by_sev
+        stats["total_alerts"] = sum(by_sev.values())
 
     return CaseDetailOut(
         **CaseOut.model_validate(case).model_dump(),
@@ -149,15 +141,15 @@ def case_timeline(
     repo = TimelineRepository(db)
     events = []
     for cid in case.capture_ids or []:
-        rows = repo.list_for_capture(cid)
-        if event_type:
-            rows = [e for e in rows if e.event_type == event_type]
-        if severity:
-            rows = [e for e in rows if e.severity == severity.lower()]
-        if after is not None:
-            rows = [e for e in rows if e.timestamp >= after]
-        if before is not None:
-            rows = [e for e in rows if e.timestamp <= before]
+        # SQL-side filtering + a per-capture cap bounds memory before the merge
+        rows, _total = repo.page_for_capture(
+            cid,
+            limit=limit,
+            event_type=event_type,
+            severity=severity,
+            after=after,
+            before=before,
+        )
         events.extend(rows)
     events = merge_timelines(events)
     return events[:limit]

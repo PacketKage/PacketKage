@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import alerts, captures, cases, engineer, flows, hosts_protocols, jobs, live, timeline_graph
@@ -19,8 +19,35 @@ async def lifespan(_: FastAPI):
 
     migrate_if_sqlite()  # add columns missing in pre-existing local DBs
     Base.metadata.create_all(bind=engine)
+    _recover_interrupted_jobs()
     register_default_parsers()
     yield
+
+
+def _recover_interrupted_jobs() -> None:
+    """Mark captures/jobs orphaned by a restart as failed.
+
+    Analysis runs in in-memory daemon threads; after a crash or restart,
+    'queued'/'analyzing' captures would stay stuck forever (the atomic
+    claim refuses to re-analyze them), so reconcile at startup.
+    """
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE captures SET status='failed', "
+                "error='interrupted by server restart' "
+                "WHERE status IN ('queued', 'analyzing')"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE analysis_jobs SET status='failed', "
+                "message='interrupted by server restart' "
+                "WHERE status IN ('queued', 'running')"
+            )
+        )
 
 
 app = FastAPI(
@@ -75,8 +102,18 @@ def _mount_spa() -> None:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
-        candidate = spa_dir / full_path
-        if full_path and candidate.is_file():
+        # Unknown /api paths must 404 like the API would, not serve the SPA.
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(404, "Not found")
+        try:
+            candidate = (spa_dir / full_path).resolve()
+        except OSError:
+            candidate = None
+        if candidate is not None and full_path and candidate.is_file() and candidate.is_relative_to(
+            spa_dir.resolve()
+        ):
+            # Starlette's :path converter passes percent-decoded input —
+            # bound-check against spa_dir or /../ traversal reads arbitrary files.
             return FileResponse(candidate)
         return FileResponse(spa_dir / "index.html")
 

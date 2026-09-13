@@ -89,7 +89,7 @@ def build_report(db: Session, capture: CaptureModel) -> str:
     flows = FlowRepository(db).list_for_capture(capture.id)
     hosts = HostRepository(db).list_for_capture(capture.id)
     events = TimelineRepository(db).list_for_capture(capture.id)
-    packet_count = len(PacketRepository(db).iter_for_capture(capture.id)) or capture.packet_count
+    packet_count = PacketRepository(db).count_for_capture(capture.id) or capture.packet_count
 
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     duration = ((capture.last_packet_ts or 0) - (capture.first_packet_ts or 0)) or 0

@@ -20,7 +20,7 @@ def list_flows(
     direction: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    sort: str = Query(default="first_seen"),
+    sort: str = Query(default="first_seen", pattern="^(first_seen|last_seen|packets|bytes|duration)$"),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ):

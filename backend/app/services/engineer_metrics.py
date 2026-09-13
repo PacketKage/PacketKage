@@ -76,7 +76,7 @@ def compute_engineer_metrics(
         "transactions": len(dns_txns),
         "avg_latency_ms": round(sum(latencies) / len(latencies) * 1000, 1) if latencies else None,
         "max_latency_ms": round(max(latencies) * 1000, 1) if latencies else None,
-        "p95_latency_ms": round(sorted(latencies)[int(len(latencies) * 0.95)] * 1000, 1)
+        "p95_latency_ms": round(sorted(latencies)[min(int(len(latencies) * 0.95), len(latencies) - 1)] * 1000, 1)
         if latencies
         else None,
         "nxdomain_rate": round(nx_rate, 3),

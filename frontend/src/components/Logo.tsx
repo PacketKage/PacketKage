@@ -1,5 +1,3 @@
-import { Activity } from 'lucide-react'
-
 /**
  * PacketKage wordmark — single inline SVG logo used by sidebar and favicon.
  * Radar-pulse motif inside a bracketed frame; emerald accent on currentColor text.
@@ -44,7 +42,3 @@ export function Logo({ size = 28, withWordmark = true }: { size?: number; withWo
   )
 }
 
-/** Compact square icon variant (favicon-style). */
-export function LogoIcon() {
-  return <Activity size={24} className="text-accent" aria-hidden />
-}

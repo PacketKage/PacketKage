@@ -56,7 +56,8 @@ export function useCsvExport<T>(opts: CsvExportOptions<T>) {
         return
       }
       downloadCsv(`${opts.label}-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(opts.headers, rows.map(opts.toRow)))
-      mutateSuccess(`Exported ${rows.length.toLocaleString()} ${opts.label}`, `export-${opts.label}`)
+      const noun = `${rows.length.toLocaleString()} ${opts.label}`
+      mutateSuccess(`Exported ${rows.length === 1 ? noun.replace(/s$/, '') : noun}`, `export-${opts.label}`)
     } catch (err) {
       mutateError('Export', err, `export-${opts.label}`)
     } finally {

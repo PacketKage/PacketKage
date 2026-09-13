@@ -116,5 +116,7 @@ def get_replay_stream(
     capture_or_404(db, capture_id)
     events = TimelineRepository(db).list_for_capture(capture_id)
     if after is not None:
+        # exclusive cursor (strictly later events) so paged playback never
+        # re-emits the boundary event; /timeline's after is an inclusive filter
         events = [e for e in events if e.timestamp > after]
     return events[:limit]

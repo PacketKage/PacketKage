@@ -133,7 +133,8 @@ def make_engine(url: str | None = None) -> Engine:
         url,
         connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
     )
-    event.listen(engine, "connect", _fk_pragma_on_connect)
+    if url.startswith("sqlite"):
+        event.listen(engine, "connect", _fk_pragma_on_connect)
     return engine
 
 

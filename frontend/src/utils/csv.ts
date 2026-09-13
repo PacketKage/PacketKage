@@ -19,6 +19,13 @@ export function toCsv(headers: string[], rows: CsvCell[][]): string {
     } else {
       value = String(cell)
     }
+    // CSV-formula mitigation: cells that Excel/Sheets would evaluate as a
+    // formula (=, +, -, @, tab, CR) get a leading single quote. Exports come
+    // from hostile network data (DNS names, UAs, paths) — see OWASP CSV
+    // Injection; the quote is a standard neutralizer and survives re-export.
+    if (/^[=+\-@\t\r]/.test(value)) {
+      value = `'${value}`
+    }
     if (/[",\r\n]/.test(value)) {
       return `"${value.replace(/"/g, '""')}"`
     }

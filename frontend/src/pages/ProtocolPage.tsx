@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { api } from '../api/client'
 import { CapturePicker } from '../components/CapturePicker'
@@ -430,11 +430,10 @@ function TableShell({
   count: number
   loading?: boolean
   error?: boolean
-  onRetry?: () => void
+  onRetry: () => void
   footer?: React.ReactNode
   children: React.ReactNode
 }) {
-  const queryClient = useQueryClient()
   return (
     <div
       className="overflow-hidden rounded-xl border border-border bg-surface-2/50"
@@ -445,7 +444,7 @@ function TableShell({
           <span className="flex items-center gap-3 text-danger">
             Failed to load records.
             <button
-              onClick={onRetry ?? (() => queryClient.invalidateQueries())}
+              onClick={onRetry}
               className="rounded-lg bg-surface-3 px-3 py-1 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
             >
               Retry

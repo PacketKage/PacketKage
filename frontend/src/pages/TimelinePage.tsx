@@ -77,7 +77,8 @@ export function TimelinePage() {
         </select>
         <select
           value={severity}
-          onChange={(e) => setSeverity(e.target.value)}
+          onChange={(e) => { setSeverity(e.target.value); setOffset(0) }}
+          aria-label="Filter by severity"
           className="rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg"
         >
           <option value="">any severity</option>

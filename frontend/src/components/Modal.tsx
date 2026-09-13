@@ -16,20 +16,29 @@ export function Modal({
   wide?: boolean
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // keep the latest onClose in a ref so the keydown listener below doesn't
+  // re-attach (and re-steal focus) every time a parent re-render passes a
+  // fresh inline arrow — e.g. while a background query polls
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
+  // focus-in on mount only; restore focus on unmount
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null
-
-    // move focus into the dialog when it opens
     const panel = panelRef.current
     if (panel) {
       const focusables = getFocusable(panel)
       ;(focusables[0] ?? panel).focus()
     }
+    return () => {
+      previouslyFocused?.focus?.()
+    }
+  }, [])
 
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
       // focus trap: Tab cycles within the dialog
@@ -51,10 +60,8 @@ export function Modal({
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
-      // restore focus to the element that opened the dialog
-      previouslyFocused?.focus?.()
     }
-  }, [onClose])
+  }, [])
 
   return (
     <div

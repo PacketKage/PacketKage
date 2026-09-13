@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronRight, Home } from 'lucide-react'
 
 /** Home / section breadcrumb shown in the topbar. */
-export function Breadcrumbs({ path, title }: { path: string; title: string }) {
+export function Breadcrumbs({ title }: { title: string }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const section = pathname.split('/').filter(Boolean)[0] ?? ''
@@ -17,23 +17,18 @@ export function Breadcrumbs({ path, title }: { path: string; title: string }) {
       >
         <Home size={14} aria-hidden />
       </button>
-      {section && (
+      {section ? (
         <>
           <ChevronRight size={14} className="shrink-0 text-fg-subtle" aria-hidden />
           <span className="truncate font-medium text-fg" aria-current="page">
             {title}
           </span>
         </>
-      )}
-      {!section && (
+      ) : (
         <span className="truncate font-medium text-fg" aria-current="page">
           {title}
         </span>
       )}
-      {/* path is unused visually; kept for API symmetry */}
-      <span data-testid="topbar-path" className="sr-only">
-        {path}
-      </span>
     </nav>
   )
 }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { CapturePicker } from '../components/CapturePicker'
 import { EvidenceTable } from '../components/EvidenceTable'
+import { Modal } from '../components/Modal'
 import { SkeletonRow, SkeletonStatus, formatTime } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import type { TimelineEvent } from '../types/api'
@@ -28,18 +28,17 @@ export function ReplayPage() {
   useEffect(() => {
     if (!playing || !events) return
     timerRef.current = setInterval(() => {
-      setPosition((p) => {
-        if (p >= events.length - 1) {
-          setPlaying(false)
-          return events.length - 1
-        }
-        return p + 1
-      })
+      setPosition((p) => Math.min(p + 1, events.length - 1))
     }, 1000 / speed)
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, [playing, speed, events])
+
+  // stop when playback reaches the end of the tape
+  useEffect(() => {
+    if (playing && events && position >= events.length - 1) setPlaying(false)
+  }, [playing, events, position])
 
   const current = events?.[position] ?? null
   const past = useMemo(() => events?.slice(Math.max(0, position - 14), position + 1) ?? [], [events, position])
@@ -170,7 +169,7 @@ export function ReplayPage() {
                     current.severity === 'critical'
                       ? 'text-danger'
                       : current.severity === 'high'
-                        ? 'text-orange-300'
+                        ? 'text-warning'
                         : 'text-fg'
                   }`}
                 >
@@ -228,53 +227,38 @@ function ReplayEventModal({ event, onClose }: { event: TimelineEvent; onClose: (
   })
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
-      onClick={onClose}
+    <Modal
+      title={event.label}
+      subtitle={`${new Date(event.timestamp * 1000).toLocaleString()} · ${event.event_type}`}
+      onClose={onClose}
     >
-      <div
-        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border-strong bg-surface-2/50 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface-2/50 px-5 py-4">
+      <div className="space-y-4 p-5">
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <div className="text-sm font-medium text-fg">{event.label}</div>
-            <div className="mt-0.5 text-xs text-fg-subtle">
-              {new Date(event.timestamp * 1000).toLocaleString()} · {event.event_type}
+            <div className="text-xs uppercase tracking-wider text-fg-subtle">Source</div>
+            <div className="mt-0.5 font-mono text-fg-muted">{event.source_ip ?? '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-fg-subtle">
+              Destination
+            </div>
+            <div className="mt-0.5 font-mono text-fg-muted">
+              {event.destination_ip ?? '—'}
+              {event.destination_port ? `:${event.destination_port}` : ''}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-fg-subtle hover:text-fg-muted">
-            <X size={18} aria-hidden />
-          </button>
         </div>
-        <div className="space-y-4 p-5">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="text-xs uppercase tracking-wider text-fg-subtle">Source</div>
-              <div className="mt-0.5 font-mono text-fg-muted">{event.source_ip ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-wider text-fg-subtle">
-                Destination
-              </div>
-              <div className="mt-0.5 font-mono text-fg-muted">
-                {event.destination_ip ?? '—'}
-                {event.destination_port ? `:${event.destination_port}` : ''}
-              </div>
-            </div>
-          </div>
-          <div className="overflow-auto rounded-lg bg-bg/60 p-3 ring-1 ring-border">
-            <EvidenceTable data={event.detail} />
-          </div>
-          {flow && (
-            <div className="rounded-lg bg-bg/60 p-3 font-mono text-xs text-fg-muted ring-1 ring-border">
-              flow: {flow.source_ip}:{flow.source_port} → {flow.destination_ip}:
-              {flow.destination_port} · {flow.packets} pkt · {flow.bytes} B ·{' '}
-              {flow.tcp_state ?? 'n/a'}
-            </div>
-          )}
+        <div className="overflow-auto rounded-lg bg-bg/60 p-3 ring-1 ring-border">
+          <EvidenceTable data={event.detail} />
         </div>
+        {flow && (
+          <div className="rounded-lg bg-bg/60 p-3 font-mono text-xs text-fg-muted ring-1 ring-border">
+            flow: {flow.source_ip}:{flow.source_port} → {flow.destination_ip}:
+            {flow.destination_port} · {flow.packets} pkt · {flow.bytes} B ·{' '}
+            {flow.tcp_state ?? 'n/a'}
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }

@@ -21,7 +21,8 @@ def engineer_metrics(capture_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Capture not found")
 
     packet_repo = PacketRepository(db)
-    if not packet_repo.iter_for_capture(capture_id):
+    count = packet_repo.count_for_capture(capture_id)
+    if not count:
         raise HTTPException(410, "No stored packets for this capture — re-analyze it")
     parsed = packet_repo.as_parsed_capture(capture_id)
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { EvidenceBlock, EvidenceTable } from './EvidenceTable'
+import { EvidenceTable } from './EvidenceTable'
 
 afterEach(cleanup)
 
@@ -44,11 +44,5 @@ describe('EvidenceTable', () => {
   it('renders null values as em-dash', () => {
     render(<EvidenceTable data={{ missing: null }} />)
     expect(screen.getByText('—')).toBeDefined()
-  })
-
-  it('EvidenceBlock renders the label header', () => {
-    render(<EvidenceBlock label="Evidence" data={{ a: 1 }} />)
-    expect(screen.getByText('Evidence')).toBeDefined()
-    expect(screen.getByText('a')).toBeDefined()
   })
 })

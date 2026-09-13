@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react'
-
 /**
  * Structured evidence renderer — replaces raw JSON.stringify dumps.
  * Renders nested objects as labeled rows, arrays as chip rows, and
@@ -77,18 +75,3 @@ function Value({ value, depth }: { value: unknown; depth: number }) {
   return <span className="font-mono text-xs text-fg-muted">{String(value)}</span>
 }
 
-/** Wrapping shell with the same label the old <pre> dumps used. */
-export function EvidenceBlock({ label, data }: { label: string; data: Record<string, unknown> }) {
-  return (
-    <div className="mb-4">
-      <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-fg-subtle">{label}</div>
-      <div className="max-h-40 overflow-auto rounded-lg bg-surface/80 p-3 ring-1 ring-border">
-        <EvidenceTable data={data} />
-      </div>
-    </div>
-  )
-}
-
-export function valueNode(v: unknown): ReactNode {
-  return <Value value={v} depth={0} />
-}

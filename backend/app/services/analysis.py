@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.models import ParsedCapture
 from app.db.orm import AnalysisJobModel, CaptureModel
+from app.db.orm import utcnow as _utcnow
 from app.parsers import resolve_parser
 from app.repositories import (
     AlertRepository,
@@ -32,14 +33,6 @@ from app.services.suspicion_engine import SuspicionEngine, correlate_alerts
 from app.services.timeline_graph import build_timeline
 
 ProgressCallback = Callable[[int, int, str], None]
-
-
-def build_flows(packets) -> list[dict]:
-    """Aggregate normalized packets into flow dicts."""
-    builder = FlowBuilder()
-    for pkt in packets:
-        builder.add_packet(pkt)
-    return builder.build()
 
 
 def _flow_summary(flow_dicts: list[dict]) -> dict:
@@ -323,9 +316,3 @@ class AnalysisService:
             parser_used=parser_name,
             summary=summary,
         )
-
-
-def _utcnow():
-    from datetime import UTC, datetime
-
-    return datetime.now(UTC)

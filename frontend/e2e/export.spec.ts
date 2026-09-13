@@ -50,17 +50,11 @@ test('flows export downloads a CSV with expected headers and rows', async ({ pag
 })
 
 test('alerts export with a filter matching nothing shows the empty toast', async ({ page }) => {
+  // The flows test (same file, serial worker) analyzed c2_beacon.pcap; wait
+  // for the picker to offer it before asserting.
   await page.goto('/alerts')
-
-  // The export button renders once an analyzed capture is selected. The flows
-  // test (serial worker before this one) analyzed c2_beacon.pcap, so the
-  // capture picker should offer it — wait for the table to be ready.
   const exportBtn = page.getByRole('button', { name: 'Export alerts to CSV' })
-  try {
-    await exportBtn.waitFor({ state: 'visible', timeout: 15_000 })
-  } catch {
-    test.skip(true, 'no analyzed capture available for the alerts export test')
-  }
+  await expect(exportBtn).toBeVisible({ timeout: 30_000 })
 
   // severity filter 'low' matches nothing in the deterministic beaconing pcap
   // (critical only) → export must show the "nothing to export" toast.

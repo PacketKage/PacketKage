@@ -332,7 +332,9 @@ function LiveCapturePanel() {
   const start = useMutation({
     mutationFn: () =>
       api.liveStart({
-        interface: iface,
+        // effectiveIface, not raw state — the select defaults to interfaces[0]
+        // but iface stays '' until the user manually changes it
+        interface: effectiveIface,
         bpf: bpf || undefined,
         max_seconds: duration,
       }),
@@ -361,6 +363,7 @@ function LiveCapturePanel() {
   })
 
   const running = live?.status === 'running'
+  // default to the first detected interface when the user never touches the select
   const effectiveIface = iface || interfaces?.[0] || ''
 
   return (

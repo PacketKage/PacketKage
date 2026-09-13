@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import {
-  Activity,
-  Bell,
+  Activity,  Bell,
   ChevronsLeft,
   ChevronsRight,
   FolderOpen,
@@ -19,6 +18,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Logo } from './Logo'
 import { Topbar, APP_VERSION } from './Topbar'
+import { useTheme } from '../hooks/theme'
 
 interface NavItem {
   to: string
@@ -74,6 +74,7 @@ function readInitialCollapsed(): boolean {
 
 export function Layout() {
   const [collapsed, setCollapsed] = useState(readInitialCollapsed)
+  const { theme } = useTheme()
 
   // persist + '[' keyboard shortcut
   useEffect(() => {
@@ -191,7 +192,9 @@ export function Layout() {
       </div>
 
       {/* Toast notifications (used by mutation flows) */}
-      <Toaster theme="system" position="bottom-right" richColors closeButton />
+      {/* theme follows the app toggle, not the OS — mixed dark-OS/light-app
+          otherwise renders toasts in the wrong palette */}
+      <Toaster theme={theme} position="bottom-right" richColors closeButton />
     </div>
   )
 }

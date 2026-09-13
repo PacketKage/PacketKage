@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { Capture } from '../types/api'
 
@@ -43,11 +43,3 @@ export function useDebouncedValue<T>(value: T, delayMs = 300): T {
   return debounced
 }
 
-/** Invalidate every query for a capture's data (after ack, re-analyze, etc.). */
-export function useInvalidateCapture() {
-  const queryClient = useQueryClient()
-  return (captureId?: string) =>
-    queryClient.invalidateQueries(
-      captureId ? { predicate: (q) => q.queryKey.includes(captureId) } : undefined,
-    )
-}

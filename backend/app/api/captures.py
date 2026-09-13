@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.parsers import registry, resolve_parser
+from app.parsers import ParserError, registry, resolve_parser
 from app.repositories import CaptureRepository, JobRepository
 from app.schemas.api import AnalyzeRequest, CaptureOut, JobOut
 from app.services.jobs import job_manager
@@ -17,9 +17,21 @@ router = APIRouter(prefix="/api/captures", tags=["captures"])
 
 ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".cap"}
 
-# libpcap magic bytes: little/big-endian pcap, pcapng
-PCAP_MAGIC = (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x0a\x0d\x0d\x0a")
+# libpcap magic bytes: little/big-endian pcap (µs + ns variants), pcapng
+PCAP_MAGIC = (
+    b"\xd4\xc3\xb2\xa1",
+    b"\xa1\xb2\xc3\xd4",
+    b"\x4d\x3c\xb2\xa1",  # nanosecond, little-endian
+    b"\xa1\xb2\x3c\x4d",  # nanosecond, big-endian
+    b"\x0a\x0d\x0d\x0a",
+)
 CHUNK_SIZE = 1024 * 1024  # 1MB streaming chunks
+
+
+def _safe_header_name(filename: str) -> str:
+    """Strip everything but a conservative charset for Content-Disposition."""
+    cleaned = "".join(c for c in filename if c.isalnum() or c in "._- ")
+    return cleaned[:80] or "report"
 
 
 @router.post("", response_model=CaptureOut, status_code=201)
@@ -55,6 +67,9 @@ async def create_capture(
     except OSError as exc:
         dest.unlink(missing_ok=True)
         raise HTTPException(500, f"Failed to store upload: {exc}") from exc
+    except ValueError as exc:  # e.g. embedded null byte in the stored filename
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, f"Invalid filename: {exc}") from exc
 
     if size == 0 or first_chunk is None:
         dest.unlink(missing_ok=True)
@@ -63,9 +78,13 @@ async def create_capture(
         dest.unlink(missing_ok=True)
         raise HTTPException(400, "Not a valid PCAP/PCAPNG file (bad magic bytes)")
 
-    repo = CaptureRepository(db)
-    capture = repo.create(filename=filename, source="upload", size_bytes=size)
-    capture = repo.update(capture, stored_path=str(dest))
+    try:
+        repo = CaptureRepository(db)
+        capture = repo.create(filename=filename, source="upload", size_bytes=size)
+        capture = repo.update(capture, stored_path=str(dest))
+    except Exception:
+        dest.unlink(missing_ok=True)  # don't orphan the uploaded file on DB failure
+        raise
     return capture
 
 
@@ -76,17 +95,8 @@ def _unique_name(filename: str) -> str:
     return f"{uuid.uuid4().hex[:8]}_{safe}"
 
 
-def get_stored_path(db: Session, capture_id: str) -> Path | None:
-    from app.db.orm import CaptureModel
-
-    capture = db.get(CaptureModel, capture_id)
-    if capture is None or not capture.stored_path:
-        return None
-    return Path(capture.stored_path)
-
-
 @router.get("", response_model=list[CaptureOut])
-def list_captures(limit: int = 100, db: Session = Depends(get_db)):
+def list_captures(limit: int = Query(default=100, ge=1, le=500), db: Session = Depends(get_db)):
     return CaptureRepository(db).list(limit)
 
 
@@ -119,7 +129,7 @@ def analyze_capture(
     try:
         if requested not in (None, "", "auto"):
             resolve_parser(requested)
-    except Exception as exc:
+    except ParserError as exc:
         raise HTTPException(400, str(exc)) from exc
 
     if not capture.stored_path or not Path(capture.stored_path).exists():
@@ -161,7 +171,7 @@ def capture_report(capture_id: str, db: Session = Depends(get_db)):
     if capture.status != "completed":
         raise HTTPException(409, "Capture must be analyzed before a report can be generated")
 
-    safe_name = capture.filename.replace("/", "_").replace(".", "_")
+    safe_name = _safe_header_name(capture.filename)
     html_body = build_report(db, capture)
     return HTMLResponse(
         content=html_body,

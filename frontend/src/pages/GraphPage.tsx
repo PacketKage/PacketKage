@@ -94,7 +94,7 @@ export function GraphPage() {
   const cyRef = useRef<Core | null>(null)
   const cyCaptureRef = useRef<string | null>(null)
 
-  const { data: graph, isError } = useQuery({
+  const { data: graph, isError, refetch } = useQuery({
     queryKey: ['graph', effectiveCaptureId],
     queryFn: () => api.getGraph(effectiveCaptureId!),
     enabled: !!effectiveCaptureId,
@@ -104,8 +104,13 @@ export function GraphPage() {
   const metrics = useMemo(() => (graph ? computeNodeMetrics(graph) : null), [graph])
   const leaves = useMemo(() => (graph && metrics ? leafDomainIds(metrics, graph) : null), [graph, metrics])
 
-  // null = all enabled (fresh capture); user toggles carve out exclusions
-  const activeEdgeFilters = edgeFilters ?? new Set(edgeGroups.map((g) => g.key))
+  // null = all enabled (fresh capture); user toggles carve out exclusions.
+  // Memoized: a fresh Set every render would recompute `visible` and re-run
+  // the cytoscape diff/stylesheet effect on every unrelated state change.
+  const activeEdgeFilters = useMemo(
+    () => edgeFilters ?? new Set(edgeGroups.map((g) => g.key)),
+    [edgeFilters, edgeGroups],
+  )
   const toggleEdgeFilter = (key: string) => {
     setEdgeFilters(toggleInSet(activeEdgeFilters, key))
   }
@@ -129,7 +134,15 @@ export function GraphPage() {
         nodeIds.has(e.data.source) &&
         nodeIds.has(e.data.target),
     )
-    const hiddenLeafCount = collapseLeaves && leaves ? [...leaves].filter((id) => !nodeIds.has(id)).length : 0
+    // count only domain-type leaves actually excluded by collapsing (not ones
+    // already hidden by the node-type filter — "show" can't reveal those)
+    const hiddenLeafCount =
+      collapseLeaves && leaves
+        ? [...leaves].filter((id) => {
+            const n = graph.nodes.find((node) => node.data.id === id)
+            return !!n && n.data.type === 'domain' && !nodeIds.has(id)
+          }).length
+        : 0
     return {
       elements: [
         ...nodes.map((n) => ({ data: { ...n.data } })),
@@ -216,7 +229,7 @@ export function GraphPage() {
         container: containerRef.current,
         elements: visible.elements,
         style: cyStyle,
-        layout: layoutOptions(visible.visibleIds.size, tier, metrics.degrees),
+        layout: layoutForTier(visible.visibleIds.size, tier, metrics.degrees),
         ...viewportForTier(tier),
       })
       cy.on('tap', 'node', (e) => {
@@ -276,7 +289,7 @@ export function GraphPage() {
           }
         } else {
           try {
-            cy.layout(layoutOptions(visible.visibleIds.size, tier, metrics.degrees)).run()
+            cy.layout(layoutForTier(visible.visibleIds.size, tier, metrics.degrees)).run()
           } catch {
             // layout is cosmetic; never let it take the page down
           }
@@ -320,7 +333,7 @@ export function GraphPage() {
         <div ref={containerRef} className="h-full w-full" />
 
         {/* legend / filters */}
-        <div className="absolute left-3 top-3 space-y-1 rounded-lg bg-surface-2/50/90 p-3 text-xs ring-1 ring-border">
+        <div className="absolute left-3 top-3 space-y-1 rounded-lg bg-surface-2/90 p-3 text-xs ring-1 ring-border">
           <div className="mb-1 font-medium text-fg-muted">Edges</div>
           {edgeGroups.map((g) => {
             const active = activeEdgeFilters.has(g.key)
@@ -416,20 +429,15 @@ export function GraphPage() {
             )}
           </div>
         )}
-        {!graph && isError && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-fg-subtle">
-            Failed to build graph. Please try again.
-          </div>
-        )}
         {isError && !graph && (
-          <div className="absolute inset-x-0 bottom-6 mx-auto w-fit">
-            <ErrorState message="Graph request failed." />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <ErrorState message="Graph request failed." onRetry={() => void refetch()} />
           </div>
         )}
 
         {/* Node detail panel */}
         {selectedNode && (
-          <div className="absolute right-3 top-3 z-10 w-72 rounded-xl border border-border-strong bg-surface-2/50/95 p-4 shadow-xl">
+          <div className="absolute right-3 top-3 z-10 w-72 rounded-xl border border-border-strong bg-surface-2/95 p-4 shadow-xl">
             <div className="mb-2 flex items-start justify-between">
               <div className="font-mono text-sm font-semibold text-fg">
                 {selectedNode.id}
@@ -477,14 +485,6 @@ function tierOf(graph: Graph, nodeFilters: Set<string>): 'detail' | 'balanced' |
     (n) => n.data.type === 'host' || !n.data.type || nodeFilters.has(n.data.type),
   )
   return computeTier(kept.length)
-}
-
-function layoutOptions(
-  nodeCount: number,
-  tier: 'detail' | 'balanced' | 'scale',
-  degrees: Map<string, number>,
-) {
-  return layoutForTier(nodeCount, tier, degrees)
 }
 
 function toggleInSet(current: Iterable<string>, name: string): Set<string> {

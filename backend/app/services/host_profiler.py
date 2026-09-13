@@ -60,8 +60,6 @@ class _HostAccumulator:
             self.bytes_received += pkt.length
         if pkt.protocol:
             self.protocols[pkt.protocol] += 1
-        if pkt.metadata.get("eth.src") == self.ip and pkt.metadata.get("eth.src"):
-            pass  # mac handled separately below
         if sent and pkt.metadata.get("eth.src"):
             self.mac = pkt.metadata["eth.src"]
         elif not sent and pkt.metadata.get("eth.dst"):

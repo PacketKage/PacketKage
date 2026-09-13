@@ -84,7 +84,7 @@ describe('Breadcrumbs', () => {
   it('shows only home on the dashboard root', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Breadcrumbs path="/" title="Dashboard" />
+        <Breadcrumbs title="Dashboard" />
       </MemoryRouter>,
     )
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeDefined()
@@ -94,7 +94,7 @@ describe('Breadcrumbs', () => {
   it('shows home > section on nested routes', () => {
     render(
       <MemoryRouter initialEntries={['/alerts']}>
-        <Breadcrumbs path="/alerts" title="Alerts" />
+        <Breadcrumbs title="Alerts" />
       </MemoryRouter>,
     )
     const crumb = screen.getByLabelText('Breadcrumb')

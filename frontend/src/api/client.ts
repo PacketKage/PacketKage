@@ -58,8 +58,6 @@ function paged(params: URLSearchParams, page?: Pagination) {
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/health'),
-
   parsers: () => request<Record<string, boolean>>('/captures/meta/parsers'),
 
   listCaptures: () => request<Capture[]>('/captures'),
@@ -79,17 +77,22 @@ export const api = {
       body: JSON.stringify(parser ? { parser } : {}),
     }),
 
-  getJob: (id: string) => request<Job>(`/jobs/${id}`),
-
   listJobs: () => request<Job[]>('/jobs'),
 
   /** Subscribe to job progress over SSE; resolves snapshot updates + terminal state. */
   streamJob: (id: string, onUpdate: (job: Job) => void, onDone: () => void) => {
     const es = new EventSource(`${BASE}/jobs/${id}/events`)
     es.onmessage = (ev) => {
-      const job = JSON.parse(ev.data) as Job
+      // a malformed frame must not kill the handler — skip it and keep
+      // streaming; the polled captures list self-heals missed snapshots
+      let job: Job
+      try {
+        job = JSON.parse(ev.data) as Job
+      } catch {
+        return
+      }
       onUpdate(job)
-      if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+      if (job.status === 'completed' || job.status === 'failed') {
         es.close()
         onDone()
       }
@@ -124,8 +127,6 @@ export const api = {
     if (limit !== undefined) params.set('limit', String(limit))
     return request<Host[]>(`/hosts?${params}`)
   },
-
-  getHost: (id: string) => request<Host>(`/hosts/${id}`),
 
   // Protocols (Step 3)
   listDns: (
@@ -172,8 +173,6 @@ export const api = {
     return request<Page<Alert>>(`/alerts?${paged(params, page)}`)
   },
 
-  getAlert: (id: string) => request<Alert>(`/alerts/${id}`),
-
   ackAlert: (id: string, acknowledged: boolean) =>
     request<Alert>(`/alerts/${id}/ack`, {
       method: 'POST',
@@ -216,9 +215,6 @@ export const api = {
 
   closeCase: (caseId: string) =>
     request<Case>(`/cases/${caseId}/close`, { method: 'POST' }),
-
-  deleteCase: (caseId: string) =>
-    request<{ detail: string }>(`/cases/${caseId}`, { method: 'DELETE' }),
 
   caseTimeline: (
     caseId: string,

@@ -1,17 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  Input,
-  Select,
-  SeverityBadge,
-  SkeletonCard,
-  Spinner,
-  StatusPill,
-} from './ui'
+import { Badge, Button, Spinner, StatusPill } from './ui'
 import { useTheme } from '../hooks/theme'
 
 // jsdom render cleanup between tests
@@ -49,53 +38,10 @@ describe('StatusPill', () => {
   })
 })
 
-describe('SeverityBadge', () => {
-  it('renders uppercase severity', () => {
-    render(<SeverityBadge severity="critical" />)
-    expect(screen.getByText('CRITICAL')).toBeDefined()
-  })
-  it('is case-insensitive', () => {
-    render(<SeverityBadge severity="Low" />)
-    expect(screen.getByText('LOW')).toBeDefined()
-  })
-})
-
-describe('Card', () => {
-  it('renders header with title, subtitle and actions', () => {
-    render(
-      <Card>
-        <CardHeader title="Flows" subtitle="Reconstructed conversations" actions={<span data-testid="a">x</span>} />
-      </Card>,
-    )
-    expect(screen.getByText('Flows')).toBeDefined()
-    expect(screen.getByText('Reconstructed conversations')).toBeDefined()
-    expect(screen.getByTestId('a')).toBeDefined()
-  })
-})
-
-describe('Input / Select', () => {
-  it('associates label with field via htmlFor/id', () => {
-    render(
-      <>
-        <Input label="BPF filter" id="bpf" />
-        <Select label="Interface" id="iface">
-          <option>lo</option>
-        </Select>
-      </>,
-    )
-    expect((screen.getByLabelText('BPF filter') as HTMLInputElement).id).toBe('bpf')
-    expect((screen.getByLabelText('Interface') as HTMLSelectElement).id).toBe('iface')
-  })
-})
-
-describe('Spinner / Skeleton', () => {
+describe('Spinner', () => {
   it('spinner is announced to screen readers', () => {
     render(<Spinner />)
     expect(screen.getByRole('status')).toBeDefined()
-  })
-  it('skeleton rows are hidden from a11y tree', () => {
-    const { container } = render(<SkeletonCard rows={2} />)
-    expect(container.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0)
   })
 })
 

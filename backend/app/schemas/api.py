@@ -7,11 +7,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class CaptureCreate(BaseModel):
-    filename: str
-    source: str = "upload"
-
-
 class CaptureOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,10 +48,6 @@ class JobOut(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     parser: str | None = None  # None => auto ("scapy" preferred, "tshark" if requested+available)
-
-
-class MessageOut(BaseModel):
-    detail: str
 
 
 class Page(BaseModel):
@@ -114,13 +105,6 @@ class PacketEvidence(BaseModel):
     flags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     packet_reference: int = 0
-
-
-class PacketOut(PacketEvidence):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    capture_id: str
 
 
 class FlowDetailOut(FlowOut):

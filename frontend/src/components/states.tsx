@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react'
-import { Button, Spinner } from './ui'
+import { Button } from './ui'
 
 /** Error message + retry button for a failed query. */
 export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
@@ -25,16 +25,6 @@ export function EmptyState({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-muted">
       {children}
-    </div>
-  )
-}
-
-/** Loading-state box. */
-export function LoadingState({ children }: { children?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-center gap-3 rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-muted">
-      <Spinner />
-      {children ?? 'Loading…'}
     </div>
   )
 }

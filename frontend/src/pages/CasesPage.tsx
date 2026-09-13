@@ -280,7 +280,7 @@ export function CasesPage() {
               <div className="space-y-2">
                 {detail.stats.incidents.map((inc) => (
                   <div
-                    key={inc.title}
+                    key={`${inc.source_ip}-${inc.title}`}
                     className="rounded-xl border border-danger/25 bg-danger/5 px-4 py-3"
                   >
                     <div className="flex items-center gap-3">

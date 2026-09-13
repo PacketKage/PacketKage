@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { api } from '../api/client'
 import { CapturePicker } from '../components/CapturePicker'
+import { ErrorState } from '../components/states'
 import { SkeletonRow, SkeletonStatus, formatBytes } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import type { EngineerIssue } from '../types/api'
@@ -100,15 +101,7 @@ export function EngineerPage() {
           </div>
         </SkeletonStatus>
       ) : isError ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 p-12">
-          <div className="text-sm text-danger">{String(error)}</div>
-          <button
-            onClick={() => refetch()}
-            className="rounded-lg bg-surface-3 px-4 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong hover:bg-border-strong"
-          >
-            Retry
-          </button>
-        </div>
+        <ErrorState message={String(error)} onRetry={() => void refetch()} />
       ) : !m ? (
         <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-subtle">
           No metrics available.
@@ -233,12 +226,12 @@ export function EngineerPage() {
                       <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                   <XAxis dataKey="t" stroke="#475569" fontSize={10} unit="s" />
                   <YAxis stroke="#475569" fontSize={10} />
                   <Tooltip
                     contentStyle={{
-                      background: '#0f172a',
+                      background: 'var(--surface)',
                       border: '1px solid #334155',
                       borderRadius: 8,
                       fontSize: 12,
@@ -264,12 +257,12 @@ export function EngineerPage() {
                       <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" />
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                   <XAxis dataKey="t" stroke="#475569" fontSize={10} unit="s" />
                   <YAxis stroke="#475569" fontSize={10} />
                   <Tooltip
                     contentStyle={{
-                      background: '#0f172a',
+                      background: 'var(--surface)',
                       border: '1px solid #334155',
                       borderRadius: 8,
                       fontSize: 12,
@@ -292,12 +285,12 @@ export function EngineerPage() {
             <ChartCard title="Protocol distribution">
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={Object.entries(m.protocol_distribution).map(([name, count]) => ({ name, count }))}>
-                  <CartesianGrid stroke="#1e293b" strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" stroke="#475569" fontSize={10} />
                   <YAxis stroke="#475569" fontSize={10} />
                   <Tooltip
                     contentStyle={{
-                      background: '#0f172a',
+                      background: 'var(--surface)',
                       border: '1px solid #334155',
                       borderRadius: 8,
                       fontSize: 12,

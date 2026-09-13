@@ -37,6 +37,9 @@ const RULE_LABELS: Record<string, string> = {
   suspicious_user_agent: 'Suspicious User Agent',
 }
 
+const isUntriaged = (a: Alert) =>
+  !a.tags.includes('confirmed') && !a.tags.includes('false-positive')
+
 export function AlertsPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
   const [severity, setSeverity] = useState('')
@@ -52,11 +55,7 @@ export function AlertsPage() {
   })
 
   const allAlerts = page?.items ?? []
-  const alerts = unconfirmedOnly
-    ? allAlerts.filter(
-        (a) => !a.tags.includes('confirmed') && !a.tags.includes('false-positive'),
-      )
-    : allAlerts
+  const alerts = unconfirmedOnly ? allAlerts.filter(isUntriaged) : allAlerts
 
   // CSV export of every alert matching the current filters. The server-side
   // severity filter rides the query; the client-side "hide confirmed &
@@ -75,9 +74,7 @@ export function AlertsPage() {
       const rows = await fetchAllPages((p) =>
         api.listAlerts(effectiveCaptureId!, { severity: severity || undefined }, p),
       )
-      return unconfirmedOnly
-        ? rows.filter((a) => !a.tags.includes('confirmed') && !a.tags.includes('false-positive'))
-        : rows
+      return unconfirmedOnly ? rows.filter(isUntriaged) : rows
     },
   })
 
@@ -169,7 +166,20 @@ export function AlertsPage() {
               href={api.captureReportUrl(effectiveCaptureId)}
               target="_blank"
               rel="noreferrer"
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-info ring-1 ring-info/30 transition hover:bg-info/10"
+              aria-disabled={captureDetail?.status !== 'completed'}
+              title={
+                captureDetail?.status === 'completed'
+                  ? 'Open the HTML investigation report'
+                  : 'Capture must be analyzed before a report can be generated'
+              }
+              onClick={(e) => {
+                if (captureDetail?.status !== 'completed') e.preventDefault()
+              }}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-info/30 transition ${
+                captureDetail?.status === 'completed'
+                  ? 'text-info hover:bg-info/10'
+                  : 'cursor-not-allowed text-fg-subtle opacity-50'
+              }`}
             >
               Download report (HTML/PDF)
             </a>
@@ -240,21 +250,27 @@ export function AlertsPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          {page && page.total > allAlerts.length && (
+            <div className="text-xs text-fg-subtle">
+              Showing first {allAlerts.length} of {page.total.toLocaleString()} alerts — export
+              to CSV for the full set.
+            </div>
+          )}
           {alerts.map((alert) => (
             <AlertCard
               key={alert.id}
               alert={alert}
               expanded={expanded === alert.id}
               onToggle={() => setExpanded(expanded === alert.id ? null : alert.id)}
-              onAck={(v) => ack.mutate({ id: alert.id, acknowledged: v })}
-              ackPending={ack.isPending && ack.variables?.id === alert.id}
-                  onToggleTag={(tag, active) => {
-                    const next = active
-                      ? alert.tags.filter((t) => t !== tag)
-                      : [...alert.tags, tag]
-                    triage.mutate({ id: alert.id, tags: next })
-                  }}
-                  onSaveNote={(note) => triage.mutate({ id: alert.id, note })}
+               onAck={(v) => ack.mutate({ id: alert.id, acknowledged: v })}
+               ackPending={ack.isPending && ack.variables?.id === alert.id}
+               onToggleTag={(tag, active) => {
+                 const next = active
+                   ? alert.tags.filter((t) => t !== tag)
+                   : [...alert.tags, tag]
+                 triage.mutate({ id: alert.id, tags: next })
+               }}
+               onSaveNote={(note) => triage.mutate({ id: alert.id, note })}
               triagePending={triage.isPending && triage.variables?.id === alert.id}
             />
           ))}
@@ -473,6 +489,9 @@ function AlertCard({
             <button
               onClick={(e) => {
                 e.stopPropagation()
+                // resync the draft each time the editor opens so a canceled
+                // edit never resurfaces as the textarea's initial content
+                setNoteDraft(alert.note ?? '')
                 setShowNote(!showNote)
               }}
               className="rounded-lg px-2.5 py-1.5 text-xs text-fg-subtle ring-1 ring-border transition hover:text-fg-muted"

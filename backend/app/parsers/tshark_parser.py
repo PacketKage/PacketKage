@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.models import NormalizedPacket, ParsedCapture
 from app.parsers.base import PacketParser, ParserError
+from app.parsers.scapy_parser import TCP_FLAG_NAMES
 
 
 class TSharkParser(PacketParser):
@@ -52,19 +53,7 @@ class TSharkParser(PacketParser):
                 "ftp.request.command",
             ]
         )
-        cmd = [
-            self._tshark_path,
-            "-r",
-            path,
-            "-T",
-            "fields",
-            "-E",
-            "separator=|",
-            "-E",
-            "occurrence=f",
-            "-e",
-        ]
-        # note: -e must precede each field when using -T fields with multiple -e flags
+        # -e must precede each field with -T fields
         cmd = [self._tshark_path, "-r", path, "-T", "fields", "-E", "separator=|", "-E", "occurrence=f"]
         for f in fields.split(","):
             cmd += ["-e", f]
@@ -177,8 +166,7 @@ class TSharkParser(PacketParser):
         if tcp_flags_hex:
             try:
                 value = int(tcp_flags_hex, 16)
-                flag_names = [(0x01, "FIN"), (0x02, "SYN"), (0x04, "RST"), (0x08, "PSH"), (0x10, "ACK"), (0x20, "URG")]
-                flags = [n for b, n in flag_names if value & b]
+                flags = [n for b, n in TCP_FLAG_NAMES if value & b]
             except ValueError:
                 flags = []
 

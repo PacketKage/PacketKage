@@ -30,7 +30,6 @@ export function usePageTitle(): string {
 /** App-shell topbar: breadcrumb + document.title sync, version, theme toggle. */
 export function Topbar() {
   const title = usePageTitle()
-  const { pathname } = useLocation()
 
   useEffect(() => {
     document.title = `PacketKage · ${title}`
@@ -38,7 +37,7 @@ export function Topbar() {
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface/80 px-6 backdrop-blur">
-      <Breadcrumbs path={pathname} title={title} />
+      <Breadcrumbs title={title} />
 
       <div className="flex items-center gap-1.5">
         <span className="hidden items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-fg-subtle ring-1 ring-border sm:inline-flex">

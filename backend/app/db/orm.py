@@ -198,7 +198,7 @@ class AnalysisJobModel(Base):
     capture_id: Mapped[str] = mapped_column(String(32), index=True)
     type: Mapped[str] = mapped_column(String(32), default="full_analysis")
     status: Mapped[str] = mapped_column(String(32), default="queued")
-    # queued | running | completed | failed | cancelled
+    # queued | running | completed | failed
     progress: Mapped[int] = mapped_column(Integer, default=0)
     stage: Mapped[str] = mapped_column(String(64), default="queued")
     message: Mapped[str | None] = mapped_column(Text, nullable=True)

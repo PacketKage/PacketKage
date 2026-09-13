@@ -15,6 +15,7 @@ from scapy.layers.tls.record import TLS  # may be absent in minimal installs
 from app.core.models import NormalizedPacket, ParsedCapture
 from app.parsers.base import PacketParser, ParserError
 
+# Shared TCP flag bit→name table (scapy and tshark both emit bit flags)
 TCP_FLAG_NAMES = [
     (0x01, "FIN"),
     (0x02, "SYN"),

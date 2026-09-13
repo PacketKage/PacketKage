@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 /**
@@ -8,7 +9,44 @@ import { expect, test } from '@playwright/test'
  *    collapsed, selective labels) and stays interactive.
  */
 
+/**
+ * Ensure a named synthetic capture is analyzed and available to the picker.
+ * Self-seeding via the API — the test must not depend on captures left in
+ * the DB by other test files (workers can run in any order).
+ */
+async function ensureAnalyzed(page: import('@playwright/test').Page, filename: string): Promise<void> {
+  const resp = await page.request.get('http://localhost:8000/api/captures?limit=500')
+  const captures: { id: string; filename: string; status: string }[] = await resp.json()
+  const existing = captures.find((c) => c.filename === filename && c.status === 'completed')
+  if (existing) return
+
+  const upload = await page.request.post('http://localhost:8000/api/captures', {
+    multipart: {
+      file: {
+        name: filename,
+        mimeType: 'application/octet-stream',
+        buffer: readFileSync(`../test-data/synthetic/${filename}`),
+      },
+    },
+  })
+  const capture = await upload.json()
+  await page.request.post(`http://localhost:8000/api/captures/${capture.id}/analyze`, {
+    data: {},
+    headers: { 'Content-Type': 'application/json' },
+  })
+  await expect
+    .poll(
+      async () => {
+        const r = await page.request.get(`http://localhost:8000/api/captures/${capture.id}`)
+        return (await r.json()).status
+      },
+      { timeout: 120_000, message: `${filename} analysis to finish` },
+    )
+    .toBe('completed')
+}
+
 test('small graph renders all edge types with dynamic filter toggles', async ({ page }) => {
+  await ensureAnalyzed(page, 'c2_beacon.pcap')
   await page.goto('/graph')
 
   // pick the small c2_beacon capture explicitly (newest may be a large one)
@@ -35,6 +73,7 @@ test('small graph renders all edge types with dynamic filter toggles', async ({ 
 
 test('large graph switches to scale tier and stays interactive', async ({ page }) => {
   // measure graph build+layout time (perf guard: draft layout on ~950 elements)
+  await ensureAnalyzed(page, 'large_graph.pcap')
   const t0 = Date.now()
   await page.goto('/graph')
 
@@ -53,9 +92,11 @@ test('large graph switches to scale tier and stays interactive', async ({ page }
   await expect(canvas).toBeVisible({ timeout: 30_000 })
   console.log(`[perf] large graph render: ${buildMs}ms`)
 
-  // labels hidden by default at scale except alert hosts (hover reveals)
-  await page.locator('canvas').first().hover({ position: { x: 400, y: 300 } })
-  await expect(canvas).toBeVisible()
+  // labels hidden by default at scale; hover highlights a node (the
+  // highlighted state draws labels for the hovered node only)
+  await canvas.hover({ position: { x: 400, y: 300 } })
+  await page.mouse.wheel(0, -120)
+  await expect(canvas).toBeVisible({ timeout: 5_000 })
 
   // override: show leaf domains → the button disappears, element count grows
   const countBefore = parseInt(((await page.getByText(/\d+ shown/).textContent()) ?? '0').replace(/\D/g, ''))

@@ -20,6 +20,9 @@ from app.db.orm import (
     utcnow,
 )
 
+# Columns the flows endpoint may sort by (mirrors the API-layer pattern check).
+FLOW_SORT_COLUMNS = {"first_seen", "last_seen", "packets", "bytes", "duration"}
+
 
 class CaptureRepository:
     def __init__(self, db: Session) -> None:
@@ -70,10 +73,10 @@ class CaptureRepository:
             .values(status="queued")
         )
         result = self.db.execute(stmt)
-        self.db.commit()
         if result.rowcount != 1:
             self.db.rollback()
             return None
+        self.db.commit()
         return self.get(capture_id)
 
 
@@ -121,7 +124,9 @@ class FlowRepository:
             select(func.count()).select_from(FlowModel).where(stmt.whereclause)
         )
 
-        sort_col = getattr(FlowModel, sort if hasattr(FlowModel, sort) else "first_seen", None)
+        # Whitelisted at the API layer (flows.py pattern); getattr is only a
+        # belt-and-suspenders fallback so an unknown name can never reach order_by.
+        sort_col = getattr(FlowModel, sort if sort in FLOW_SORT_COLUMNS else "first_seen", None)
         if sort_col is None:
             sort_col = FlowModel.first_seen
         order_fn = desc if order == "desc" else lambda c: c.asc()
@@ -129,8 +134,6 @@ class FlowRepository:
         return list(self.db.scalars(stmt)), int(total or 0)
 
     def delete_for_capture(self, capture_id: str) -> int:
-        from sqlalchemy import delete
-
         result = self.db.execute(delete(FlowModel).where(FlowModel.capture_id == capture_id))
         self.db.commit()
         return result.rowcount or 0
@@ -347,6 +350,15 @@ class AlertRepository:
         self.db.commit()
         return result.rowcount or 0
 
+    def count_by_severity(self, capture_ids: list[str]) -> dict[str, int]:
+        """Grouped severity counts for one or more captures (one query)."""
+        stmt = (
+            select(AlertModel.severity, func.count())
+            .where(AlertModel.capture_id.in_(capture_ids))
+            .group_by(AlertModel.severity)
+        )
+        return {sev: int(count) for sev, count in self.db.execute(stmt)}
+
     def set_acknowledged(self, alert_id: str, ack: bool) -> AlertModel | None:
         alert = self.get(alert_id)
         if alert is None:
@@ -428,6 +440,16 @@ class TimelineRepository:
         self.db.commit()
         return result.rowcount or 0
 
+    def ts_range_for_captures(self, capture_ids: list[str]) -> tuple[float | None, float | None]:
+        """(min, max) event timestamps across captures via SQL aggregates."""
+        if not capture_ids:
+            return None, None
+        stmt = select(
+            func.min(TimelineEventModel.timestamp), func.max(TimelineEventModel.timestamp)
+        ).where(TimelineEventModel.capture_id.in_(capture_ids))
+        lo, hi = self.db.execute(stmt).one()
+        return (float(lo) if lo is not None else None, float(hi) if hi is not None else None)
+
 
 class JobRepository:
     def __init__(self, db: Session) -> None:
@@ -450,10 +472,6 @@ class JobRepository:
             .order_by(desc(AnalysisJobModel.created_at))
         )
         return list(self.db.scalars(stmt))
-
-    def latest_for_capture(self, capture_id: str) -> AnalysisJobModel | None:
-        jobs = self.list_for_capture(capture_id)
-        return jobs[0] if jobs else None
 
     def update(self, job: AnalysisJobModel, **fields) -> AnalysisJobModel:
         for key, value in fields.items():
@@ -542,6 +560,10 @@ class PacketRepository:
             .order_by(PacketModel.packet_reference)
         )
         return list(self.db.scalars(stmt))
+
+    def count_for_capture(self, capture_id: str) -> int:
+        stmt = select(func.count()).select_from(PacketModel).where(PacketModel.capture_id == capture_id)
+        return int(self.db.scalar(stmt) or 0)
 
     def as_parsed_capture(self, capture_id: str):
         """All packets as a ParsedCapture-shaped object (for analysis services)."""

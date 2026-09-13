@@ -26,9 +26,12 @@ export function Dashboard() {
 
   const completed = captures?.filter((c) => c.status === 'completed') ?? []
   const totalPackets = completed.reduce((acc, c) => acc + c.packet_count, 0)
-  const activeJob = jobs?.find((j) => j.status === 'running' || j.status === 'queued')
-  const lastFlowSummary = completed[completed.length - 1]?.summary?.flow_summary ?? null
-  const alertSummary = completed[completed.length - 1]?.summary?.alert_summary ?? null
+  const activeJobs = jobs?.filter((j) => j.status === 'running' || j.status === 'queued') ?? []
+  const activeJob = activeJobs[0]
+  // captures are listed newest-first — index 0 is the most recent analysis
+  const latestSummary = completed[0]?.summary
+  const lastFlowSummary = latestSummary?.flow_summary ?? null
+  const alertSummary = latestSummary?.alert_summary ?? null
 
   return (
     <div className="p-8">
@@ -61,8 +64,8 @@ export function Dashboard() {
           <StatCard label="Total Packets" value={totalPackets.toLocaleString()} />
           <StatCard
             label="Active Jobs"
-            value={activeJob ? 1 : 0}
-            tone={activeJob ? 'amber' : undefined}
+            value={activeJobs.length}
+            tone={activeJobs.length > 0 ? 'amber' : undefined}
           />
         </div>
       )}

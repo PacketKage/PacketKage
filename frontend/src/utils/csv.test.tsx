@@ -49,6 +49,13 @@ describe('toCsv', () => {
     expect(csv).toBe('Title\r\n"Beaconing: 192.168.1.42 → 185.234.72.19, ""suspicious"""\r\n')
   })
 
+  it('neutralizes CSV formula injection (=, +, -, @ prefixes)', () => {
+    const csv = toCsv(['Domain'], [['=cmd|"/c calc"!A1'], ['+SUM(A1:A2)'], ['-2+1'], ['@x(y)']])
+    expect(csv).toBe(
+      'Domain\r\n"\'=cmd|""/c calc""!A1"\r\n\'+SUM(A1:A2)\r\n\'-2+1\r\n\'@x(y)\r\n',
+    )
+  })
+
   it('quotes fields containing newlines so row structure is preserved', () => {
     const csv = toCsv(['Note'], [['line1\nline2']])
     expect(csv).toBe('Note\r\n"line1\nline2"\r\n')
@@ -320,7 +327,7 @@ describe('useCsvExport — AlertsPage client filter', () => {
 
     await vi.waitFor(() => {
       // only the untriaged alert is exported
-      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alerts', { id: 'export-alerts' })
+      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alert', { id: 'export-alerts' })
     })
   })
 
@@ -348,7 +355,7 @@ describe('useCsvExport — AlertsPage client filter', () => {
     await clickExportWhenEnabled()
 
     await vi.waitFor(() => {
-      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alerts', { id: 'export-alerts' })
+      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alert', { id: 'export-alerts' })
     })
     const exportUrl = fetchMock.mock.calls
       .map(([u]) => String(u))
