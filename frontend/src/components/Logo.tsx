@@ -1,5 +1,5 @@
 /**
- * PacketKage wordmark — single inline SVG logo used by sidebar and favicon.
+ * PacketKage wordmark — single inline SVG logo used by the sidebar.
  * Radar-pulse motif inside a bracketed frame; emerald accent on currentColor text.
  */
 export function Logo({ size = 28, withWordmark = true }: { size?: number; withWordmark?: boolean }) {
