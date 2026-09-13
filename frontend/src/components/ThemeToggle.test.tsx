@@ -5,7 +5,7 @@ import { ThemeToggle } from './ThemeToggle'
 beforeEach(() => {
   document.documentElement.classList.remove('light')
   try {
-    localStorage.removeItem('packetsleuth-theme')
+    localStorage.removeItem('packetkage-theme')
   } catch {
     /* storage unavailable */
   }
@@ -15,7 +15,7 @@ afterEach(() => {
   cleanup()
   document.documentElement.classList.remove('light')
   try {
-    localStorage.removeItem('packetsleuth-theme')
+    localStorage.removeItem('packetkage-theme')
   } catch {
     /* storage unavailable */
   }
@@ -39,7 +39,7 @@ describe('ThemeToggle', () => {
 
     // document switched to light + preference persisted
     expect(document.documentElement.classList.contains('light')).toBe(true)
-    expect(localStorage.getItem('packetsleuth-theme')).toBe('light')
+    expect(localStorage.getItem('packetkage-theme')).toBe('light')
 
     // button re-labels for the reverse action
     const darkBtn = screen.getByRole('button', { name: 'Switch to dark theme' })
@@ -50,7 +50,7 @@ describe('ThemeToggle', () => {
       fireEvent.click(darkBtn)
     })
     expect(document.documentElement.classList.contains('light')).toBe(false)
-    expect(localStorage.getItem('packetsleuth-theme')).toBe('dark')
+    expect(localStorage.getItem('packetkage-theme')).toBe('dark')
   })
 
   it('starts in light mode when the pre-paint script already applied it', () => {

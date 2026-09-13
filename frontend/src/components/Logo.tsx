@@ -1,7 +1,7 @@
 import { Activity } from 'lucide-react'
 
 /**
- * PacketSleuth wordmark — single inline SVG logo used by sidebar and favicon.
+ * PacketKage wordmark — single inline SVG logo used by sidebar and favicon.
  * Radar-pulse motif inside a bracketed frame; emerald accent on currentColor text.
  */
 export function Logo({ size = 28, withWordmark = true }: { size?: number; withWordmark?: boolean }) {
@@ -37,7 +37,7 @@ export function Logo({ size = 28, withWordmark = true }: { size?: number; withWo
       </svg>
       {withWordmark && (
         <span className="flex flex-col leading-none">
-          <span className="text-[15px] font-semibold tracking-tight text-fg">PacketSleuth</span>
+          <span className="text-[15px] font-semibold tracking-tight text-fg">PacketKage</span>
         </span>
       )}
     </span>

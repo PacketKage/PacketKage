@@ -23,8 +23,8 @@ COPY backend/pyproject.toml backend/mypy.ini ./
 COPY --from=frontend-build /build/dist ./app/dist
 
 # persistent analysis data (SQLite DB + uploads)
-ENV PACKETSLEUTH_DB=sqlite:////data/packetsleuth.db \
-    PACKETSLEUTH_UPLOAD_DIR=/data/uploads
+ENV PACKETKAGE_DB=sqlite:////data/packetkage.db \
+    PACKETKAGE_UPLOAD_DIR=/data/uploads
 VOLUME ["/data"]
 RUN mkdir -p /data/uploads
 

@@ -33,7 +33,7 @@ export function Topbar() {
   const { pathname } = useLocation()
 
   useEffect(() => {
-    document.title = `PacketSleuth · ${title}`
+    document.title = `PacketKage · ${title}`
   }, [title])
 
   return (

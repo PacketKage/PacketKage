@@ -129,7 +129,7 @@ describe('useTheme', () => {
     // restore for other tests
     document.documentElement.classList.remove('light')
     try {
-      localStorage.removeItem('packetsleuth-theme')
+      localStorage.removeItem('packetkage-theme')
     } catch {
       /* ignore */
     }

@@ -1,4 +1,4 @@
-"""PacketSleuth FastAPI application entry point."""
+"""PacketKage FastAPI application entry point."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager

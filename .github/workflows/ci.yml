@@ -80,6 +80,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: packetsleuth:ci
+          tags: packetkage:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -62,7 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
-const STORAGE_KEY = 'packetsleuth-sidebar-collapsed'
+const STORAGE_KEY = 'packetkage-sidebar-collapsed'
 
 function readInitialCollapsed(): boolean {
   try {
@@ -110,7 +110,7 @@ export function Layout() {
         }`}
       >
         <div className="flex h-14 items-center border-b border-border px-4">
-          <NavLink to="/" aria-label="PacketSleuth home" className="flex items-center overflow-hidden">
+          <NavLink to="/" aria-label="PacketKage home" className="flex items-center overflow-hidden">
             {collapsed ? (
               <Logo size={26} withWordmark={false} />
             ) : (

@@ -64,7 +64,7 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
     await page.emulateMedia({ colorScheme: media })
     await page.goto(BASE + '/')
-    await page.evaluate(() => localStorage.removeItem('packetsleuth-theme'))
+    await page.evaluate(() => localStorage.removeItem('packetkage-theme'))
     await page.reload()
     await page.waitForTimeout(500)
 

@@ -1,5 +1,5 @@
 [project]
-name = "packetsleuth-backend"
+name = "packetkage-backend"
 version = "1.0.0"
 description = "Network traffic analysis and investigation platform — backend"
 requires-python = ">=3.12"

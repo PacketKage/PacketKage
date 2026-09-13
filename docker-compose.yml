@@ -1,11 +1,11 @@
 services:
-  packetsleuth:
+  packetkage:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      - packetsleuth-data:/data
+      - packetkage-data:/data
     restart: unless-stopped
 
 volumes:
-  packetsleuth-data:
+  packetkage-data:

@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="assets/Logo.png" alt="PacketSleuth" width="480" />
+  <img src="assets/Logo.png" alt="PacketKage" width="480" />
 </p>
 
-[![CI](https://github.com/besafewithsamy/PacketSleuth/actions/workflows/ci.yml/badge.svg)](https://github.com/besafewithsamy/PacketSleuth/actions/workflows/ci.yml)  
+[![CI](https://github.com/besafewithsamy/PacketKage/actions/workflows/ci.yml/badge.svg)](https://github.com/besafewithsamy/PacketKage/actions/workflows/ci.yml)  
 
 <img src="https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white"/>  <img src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=blue" /> <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" /> <img src="https://img.shields.io/badge/fastapi-109989?style=for-the-badge&logo=FASTAPI&logoColor=white" />
 
 **Network traffic analysis and investigation, built around understanding what happened.**
 
-PacketSleuth turns raw network traffic into a clear picture of network activity. Instead of forcing you to work through thousands of packets to understand an incident, it reconstructs the traffic into flows, hosts, protocols, behaviors, events, and alerts — while keeping the underlying packets available as evidence.
+PacketKage turns raw network traffic into a clear picture of network activity. Instead of forcing you to work through thousands of packets to understand an incident, it reconstructs the traffic into flows, hosts, protocols, behaviors, events, and alerts — while keeping the underlying packets available as evidence.
 
 > Here is what happened. Let me show you the network evidence behind it.
 
@@ -20,7 +20,7 @@ Packets → Flows → Hosts → Behaviors → Events → Investigation
 
 ![Dashboard overview](assets/pic1.png)
 
-## What PacketSleuth Does
+## What PacketKage Does
 
 ### Traffic Investigation
 
@@ -45,7 +45,7 @@ Packets → Flows → Hosts → Behaviors → Events → Investigation
 
 ### Suspicious Activity Detection
 
-PacketSleuth uses deterministic and explainable rules rather than relying on black-box machine learning.
+PacketKage uses deterministic and explainable rules rather than relying on black-box machine learning.
 
 Current detections include:
 
@@ -70,7 +70,7 @@ Related alerts are also correlated into **incidents** — per-host groups of ale
 
 ### Timeline, Graph & Replay
 
-PacketSleuth turns network activity into an investigation timeline that can be filtered by host, protocol, event type, severity, and time.
+PacketKage turns network activity into an investigation timeline that can be filtered by host, protocol, event type, severity, and time.
 
 It also provides:
 
@@ -90,7 +90,7 @@ It also provides:
 
 ### Network Engineering
 
-PacketSleuth is not limited to security investigations. It also provides network health information including:
+PacketKage is not limited to security investigations. It also provides network health information including:
 
 * Bandwidth and packet rates
 * Top talkers
@@ -120,7 +120,7 @@ Then open [http://localhost:8000](http://localhost:8000) — the full app (front
 
 ```bash
 
-cd ~/Projects/PacketSleuth/backend
+cd ~/Projects/PacketKage/backend
 
 source .venv/bin/activate
 
@@ -142,7 +142,7 @@ Open another terminal:
 
 ```bash
 
-cd ~/Projects/PacketSleuth/frontend
+cd ~/Projects/PacketKage/frontend
 
 npm run dev
 ```
@@ -153,7 +153,7 @@ Then open:
 
 ## Test Data
 
-PacketSleuth includes a deterministic PCAP generator for development and testing.
+PacketKage includes a deterministic PCAP generator for development and testing.
 
 From the `backend` directory with the virtual environment activated:
 
@@ -180,7 +180,7 @@ The generator includes scenarios such as:
 
 ## Architecture
 
-PacketSleuth separates packet parsing from the analysis engine through a normalized internal model.
+PacketKage separates packet parsing from the analysis engine through a normalized internal model.
 
 ```text
 PCAP
@@ -214,7 +214,7 @@ Parser-specific objects do not leave the parser layer. This keeps the analysis e
 ## Project Structure
 
 ```text
-PacketSleuth/
+PacketKage/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
@@ -287,11 +287,11 @@ cd frontend
 npx playwright test
 ```
 
-PacketSleuth also uses deterministic synthetic PCAPs to make analysis scenarios reproducible during development and testing.
+PacketKage also uses deterministic synthetic PCAPs to make analysis scenarios reproducible during development and testing.
 
 ## Live Capture
 
-PacketSleuth can also record traffic directly from a network interface — no upload needed. On the **Capture** page:
+PacketKage can also record traffic directly from a network interface — no upload needed. On the **Capture** page:
 
 1. Pick a network interface (and optionally a BPF filter, e.g. `tcp port 80`)
 2. Press **Start live capture** — a live packet counter and auto-stop countdown appear
@@ -309,13 +309,13 @@ The recorded traffic is saved as a PCAP and flows through the exact same analysi
 
 ## Current Status
 
-PacketSleuth is currently a local, single-user application focused on PCAP-based network investigation and analysis.
+PacketKage is currently a local, single-user application focused on PCAP-based network investigation and analysis.
 
 The core analysis pipeline, flow reconstruction, protocol analysis, behavioral detection, timeline, graph, replay, and network engineering features are implemented.
 
 ## Contributing
 
-PacketSleuth is an evolving project. Contributions, ideas, bug reports, and improvements are welcome.
+PacketKage is an evolving project. Contributions, ideas, bug reports, and improvements are welcome.
 
 If you have an idea that could make network traffic easier to understand or investigate, feel free to open an issue or submit a pull request.
 

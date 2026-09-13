@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic synthetic PCAP generator for PacketSleuth.
+"""Deterministic synthetic PCAP generator for PacketKage.
 
 Every scenario is reproducible: fixed seeds, fixed timestamps, fixed hosts.
 Output PCAPs are byte-stable given the same Scapy version.
@@ -153,7 +153,7 @@ def scenario_normal_traffic() -> list:
         if i < 2:
 
             http_sport = 52000 + i
-            pkts.append(http_req(ts + 0.05, ws, ext, http_sport, domain, ua="Mozilla/5.0 (X11; Linux x86_64) PacketSleuthTest/1.0"))
+            pkts.append(http_req(ts + 0.05, ws, ext, http_sport, domain, ua="Mozilla/5.0 (X11; Linux x86_64) PacketKageTest/1.0"))
             pkts.append(http_resp(ts + 0.06, ext, ws, http_sport, status=200 if i == 0 else 404, body=(b"<html>hello</html>" if i == 0 else b"not found")))
         else:
             tls_sport = 53000 + i

@@ -6,7 +6,7 @@ import { Breadcrumbs } from './Breadcrumbs'
 
 beforeEach(() => {
   try {
-    localStorage.removeItem('packetsleuth-sidebar-collapsed')
+    localStorage.removeItem('packetkage-sidebar-collapsed')
   } catch {
     /* storage unavailable */
   }
@@ -15,7 +15,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   try {
-    localStorage.removeItem('packetsleuth-sidebar-collapsed')
+    localStorage.removeItem('packetkage-sidebar-collapsed')
   } catch {
     /* storage unavailable */
   }
@@ -44,7 +44,7 @@ describe('Layout shell', () => {
     renderLayoutAt('/alerts')
     const crumb = screen.getByLabelText('Breadcrumb')
     expect(crumb.textContent).toContain('Alerts')
-    await waitFor(() => expect(document.title).toBe('PacketSleuth · Alerts'))
+    await waitFor(() => expect(document.title).toBe('PacketKage · Alerts'))
   })
 
   it('collapses via button, persists, and restores via [ shortcut', async () => {
@@ -56,7 +56,7 @@ describe('Layout shell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     })
     expect(aside.className).toContain('w-[68px]')
-    expect(localStorage.getItem('packetsleuth-sidebar-collapsed')).toBe('1')
+    expect(localStorage.getItem('packetkage-sidebar-collapsed')).toBe('1')
     // collapsed mode keeps labels screen-reader accessible
     const nav = screen.getByLabelText('Main navigation')
     expect(nav.textContent).toContain('Dashboard')
@@ -65,7 +65,7 @@ describe('Layout shell', () => {
       fireEvent.keyDown(window, { key: '[' })
     })
     expect(aside.className).not.toContain('w-[68px]')
-    expect(localStorage.getItem('packetsleuth-sidebar-collapsed')).toBe('0')
+    expect(localStorage.getItem('packetkage-sidebar-collapsed')).toBe('0')
   })
 
   it('renders skip-to-content link and main landmark', () => {

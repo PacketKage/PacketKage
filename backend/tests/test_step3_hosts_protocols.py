@@ -127,7 +127,7 @@ def test_http_transactions(client):
     assert ex["server_port"] == 80
     gh = by_host["github.com"]
     assert gh["status_code"] == 404
-    assert "PacketSleuthTest" in (gh["user_agent"] or "")
+    assert "PacketKageTest" in (gh["user_agent"] or "")
 
 
 def test_http_status_filter(client):

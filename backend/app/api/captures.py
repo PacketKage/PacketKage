@@ -166,6 +166,6 @@ def capture_report(capture_id: str, db: Session = Depends(get_db)):
     return HTMLResponse(
         content=html_body,
         headers={
-            "Content-Disposition": f'inline; filename="packetsleuth_report_{safe_name}.html"',
+            "Content-Disposition": f'inline; filename="packetkage_report_{safe_name}.html"',
         },
     )

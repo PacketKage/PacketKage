@@ -32,8 +32,8 @@ def app_env(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     upload_dir = tmp_path / "uploads"
     upload_dir.mkdir()
-    monkeypatch.setenv("PACKETSLEUTH_DB", f"sqlite:///{db_path}")
-    monkeypatch.setenv("PACKETSLEUTH_UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setenv("PACKETKAGE_DB", f"sqlite:///{db_path}")
+    monkeypatch.setenv("PACKETKAGE_UPLOAD_DIR", str(upload_dir))
 
     # Reimport config/engine with patched env
     for mod in list(sys.modules):

@@ -10,8 +10,8 @@ test('upload → analyze → alerts appear', async ({ page }) => {
   await page.goto('/')
 
   // App shell rendered with the new brand
-  await expect(page).toHaveTitle('PacketSleuth · Dashboard')
-  await expect(page.getByRole('link', { name: 'PacketSleuth home' })).toBeVisible()
+  await expect(page).toHaveTitle('PacketKage · Dashboard')
+  await expect(page.getByRole('link', { name: 'PacketKage home' })).toBeVisible()
 
   // Go to the capture page and upload the c2 beacon pcap (deterministic alert source)
   await page.getByRole('link', { name: 'Capture' }).click()

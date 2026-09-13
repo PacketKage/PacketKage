@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 export type Theme = 'dark' | 'light'
 
-const STORAGE_KEY = 'packetsleuth-theme'
+const STORAGE_KEY = 'packetkage-theme'
 
 function readInitialTheme(): Theme {
   if (typeof document !== 'undefined' && document.documentElement.classList.contains('light')) {
