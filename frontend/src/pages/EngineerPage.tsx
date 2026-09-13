@@ -16,6 +16,7 @@ import { CapturePicker } from '../components/CapturePicker'
 import { ErrorState } from '../components/states'
 import { SkeletonRow, SkeletonStatus, formatBytes } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
+import { useTheme } from '../hooks/theme'
 import type { EngineerIssue } from '../types/api'
 
 const HEALTH_STYLE: Record<string, { label: string; cls: string }> = {
@@ -35,9 +36,18 @@ const PROTOCOL_COLORS = [
   '#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#f87171',
   '#22d3ee', '#c084fc', '#4ade80', '#fb923c', '#94a3b8',
 ]
+/* Protocol bars keep fixed hues for cross-capture comparability, but the
+   categorical ramp is theme-tinted: light mode uses deepened variants. */
+const PROTOCOL_COLORS_LIGHT = [
+  '#0284c7', '#7c3aed', '#059669', '#d97706', '#dc2626',
+  '#0e7490', '#9333ea', '#16a34a', '#ea580c', '#64748b',
+]
 
 export function EngineerPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const { theme } = useTheme()
+  const protocolColors =
+    theme === 'light' ? PROTOCOL_COLORS_LIGHT : PROTOCOL_COLORS
 
   const { data: m, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['engineer', effectiveCaptureId],
@@ -222,17 +232,17 @@ export function EngineerPage() {
                 <AreaChart data={m.timeseries.pps}>
                   <defs>
                     <linearGradient id="ppsGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--info)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--info)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                  <XAxis dataKey="t" stroke="#475569" fontSize={10} unit="s" />
-                  <YAxis stroke="#475569" fontSize={10} />
+                  <XAxis dataKey="t" stroke="var(--fg-subtle)" fontSize={10} unit="s" />
+                  <YAxis stroke="var(--fg-subtle)" fontSize={10} />
                   <Tooltip
                     contentStyle={{
                       background: 'var(--surface)',
-                      border: '1px solid #334155',
+                      border: '1px solid var(--border-strong)',
                       borderRadius: 8,
                       fontSize: 12,
                     }}
@@ -240,7 +250,7 @@ export function EngineerPage() {
                   <Area
                     type="monotone"
                     dataKey="pps"
-                    stroke="#38bdf8"
+                    stroke="var(--info)"
                     fill="url(#ppsGrad)"
                     strokeWidth={1.5}
                   />
@@ -253,17 +263,17 @@ export function EngineerPage() {
                 <AreaChart data={m.timeseries.bandwidth}>
                   <defs>
                     <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#34d399" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--success)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-                  <XAxis dataKey="t" stroke="#475569" fontSize={10} unit="s" />
-                  <YAxis stroke="#475569" fontSize={10} />
+                  <XAxis dataKey="t" stroke="var(--fg-subtle)" fontSize={10} unit="s" />
+                  <YAxis stroke="var(--fg-subtle)" fontSize={10} />
                   <Tooltip
                     contentStyle={{
                       background: 'var(--surface)',
-                      border: '1px solid #334155',
+                      border: '1px solid var(--border-strong)',
                       borderRadius: 8,
                       fontSize: 12,
                     }}
@@ -271,7 +281,7 @@ export function EngineerPage() {
                   <Area
                     type="monotone"
                     dataKey="bps"
-                    stroke="#34d399"
+                    stroke="var(--success)"
                     fill="url(#bwGrad)"
                     strokeWidth={1.5}
                   />
@@ -286,19 +296,19 @@ export function EngineerPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={Object.entries(m.protocol_distribution).map(([name, count]) => ({ name, count }))}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="#475569" fontSize={10} />
-                  <YAxis stroke="#475569" fontSize={10} />
+                  <XAxis dataKey="name" stroke="var(--fg-subtle)" fontSize={10} />
+                  <YAxis stroke="var(--fg-subtle)" fontSize={10} />
                   <Tooltip
                     contentStyle={{
                       background: 'var(--surface)',
-                      border: '1px solid #334155',
+                      border: '1px solid var(--border-strong)',
                       borderRadius: 8,
                       fontSize: 12,
                     }}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                     {Object.entries(m.protocol_distribution).map((_, i) => (
-                      <Cell key={i} fill={PROTOCOL_COLORS[i % PROTOCOL_COLORS.length]} />
+                      <Cell key={i} fill={protocolColors[i % protocolColors.length]} />
                     ))}
                   </Bar>
                 </BarChart>

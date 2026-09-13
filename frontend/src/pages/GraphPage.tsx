@@ -8,6 +8,7 @@ import { CapturePicker } from '../components/CapturePicker'
 import { ErrorState } from '../components/states'
 import { SkeletonRow, formatBytes } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
+import { useTheme } from '../hooks/theme'
 import type { Graph, GraphNodeData } from '../types/api'
 import {
   computeNodeMetrics,
@@ -24,36 +25,62 @@ import {
 
 cytoscape.use(fcose)
 
-const NODE_STYLE: Record<string, { bg: string; border: string }> = {
-  host: { bg: '#1e293b', border: '#38bdf8' },
-  domain: { bg: '#1e1b2e', border: '#a78bfa' },
-  service: { bg: '#17251f', border: '#34d399' },
+// Theme-aware palette: same hue identities across themes (sky=host/DNS,
+// violet=domain/TLS, emerald=service/EXPOSES, amber=HTTP) but each theme
+// gets values tuned for its canvas — dark-mode brights / light-mode deeps.
+const DARK_PALETTE = {
+  nodeFills: { host: '#1e293b', domain: '#1e1b2e', service: '#17251f' },
+  label: '#94a3b8',
+  fallbackEdge: '#f472b6',
+  edges: {
+    DNS: '#38bdf8',
+    RESOLVES_TO: '#64748b',
+    HTTP: '#fbbf24',
+    HTTPS: '#fbbf24',
+    TLS: '#a78bfa',
+    TCP: '#475569',
+    UDP: '#7c3aed',
+    EXPOSES: '#34d399',
+  },
 }
 
-const EDGE_COLORS: Record<string, string> = {
-  DNS: '#38bdf8',
-  RESOLVES_TO: '#64748b',
-  HTTP: '#fbbf24',
-  HTTPS: '#fbbf24',
-  TLS: '#a78bfa',
-  TCP: '#475569',
-  UDP: '#7c3aed',
-  EXPOSES: '#34d399',
+const LIGHT_PALETTE = {
+  nodeFills: { host: '#e0f2fe', domain: '#ede9fe', service: '#d1fae5' },
+  label: '#64748b',
+  fallbackEdge: '#db2777',
+  edges: {
+    DNS: '#0284c7',
+    RESOLVES_TO: '#94a3b8',
+    HTTP: '#d97706',
+    HTTPS: '#d97706',
+    TLS: '#7c3aed',
+    TCP: '#94a3b8',
+    UDP: '#6d28d9',
+    EXPOSES: '#059669',
+  },
 }
+
+const nodeBorderColor = (type: string, theme: string) =>
+  theme === 'light'
+    ? { host: '#0284c7', domain: '#7c3aed', service: '#059669' }[type] ?? '#0284c7'
+    : { host: '#38bdf8', domain: '#a78bfa', service: '#34d399' }[type] ?? '#38bdf8'
 
 const KNOWN_EDGE_TYPES = ['DNS', 'RESOLVES_TO', 'HTTP', 'TLS', 'TCP', 'UDP', 'EXPOSES']
 // HTTP and HTTPS share a color/toggle; HTTPS maps onto the HTTP filter
 const filterForEdge = (type: string) => (type === 'HTTPS' ? 'HTTP' : type)
-const edgeColor = (type: string) => EDGE_COLORS[type] ?? '#f472b6'
+const edgeColor = (type: string, palette: GraphPalette): string =>
+  (palette.edges as Record<string, string>)[type] ?? palette.fallbackEdge
 const edgeLabel = (type: string) =>
   type === 'RESOLVES_TO' ? 'resolves to' : type.toLowerCase()
 
 type EdgeGroup = { key: string; color: string; label: string; count: number }
 
+type GraphPalette = typeof DARK_PALETTE
+
 // Group the actual edge types found in this graph into toggle entries:
 // known types get their canonical toggle; anything else (QUIC, C2-PORT, …)
 // becomes its own toggle so no edge is implicitly hidden.
-function buildEdgeGroups(graph: Graph): EdgeGroup[] {
+function buildEdgeGroups(graph: Graph, palette: GraphPalette): EdgeGroup[] {
   const counts = new Map<string, { count: number; original: string }>()
   for (const e of graph.edges) {
     const key = filterForEdge(e.data.type)
@@ -70,7 +97,7 @@ function buildEdgeGroups(graph: Graph): EdgeGroup[] {
     .filter((key) => counts.has(key))
     .map((key) => {
       const { count } = counts.get(key)!
-      return { key, color: edgeColor(key), label: edgeLabel(key), count }
+      return { key, color: edgeColor(key, palette), label: edgeLabel(key), count }
     })
   return groups
 }
@@ -84,6 +111,8 @@ interface VisibleElements {
 
 export function GraphPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const { theme } = useTheme()
+  const palette = theme === 'light' ? LIGHT_PALETTE : DARK_PALETTE
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [edgeFilters, setEdgeFilters] = useState<Set<string> | null>(null)
   const [nodeFilters, setNodeFilters] = useState<Set<string>>(
@@ -100,7 +129,10 @@ export function GraphPage() {
     enabled: !!effectiveCaptureId,
   })
 
-  const edgeGroups = useMemo(() => (graph ? buildEdgeGroups(graph) : []), [graph])
+  const edgeGroups = useMemo(
+    () => (graph ? buildEdgeGroups(graph, palette) : []),
+    [graph, palette],
+  )
   const metrics = useMemo(() => (graph ? computeNodeMetrics(graph) : null), [graph])
   const leaves = useMemo(() => (graph && metrics ? leafDomainIds(metrics, graph) : null), [graph, metrics])
 
@@ -182,16 +214,16 @@ export function GraphPage() {
         style: {
           label: (ele: any) => (labeled.has(ele.data('id')) ? ele.data('label') : ''),
           'background-color': (ele: { data: (k: string) => any }) =>
-            NODE_STYLE[ele.data('type')]?.bg ?? '#1e293b',
+            palette.nodeFills[ele.data('type') as keyof typeof palette.nodeFills] ?? palette.nodeFills.host,
           'border-color': (ele: { data: (k: string) => any }) =>
             ele.data('alert_count') > 0
-              ? '#f87171'
-              : NODE_STYLE[ele.data('type')]?.border ?? '#38bdf8',
+              ? '#ef4444'
+              : nodeBorderColor(ele.data('type'), theme),
           'border-width': (ele: { data: (k: string) => any }) =>
             ele.data('alert_count') > 0 ? 3 : 1.5,
-          color: '#94a3b8',
+          color: palette.label,
           'font-size': 9,
-          'font-family': 'ui-monospace, monospace',
+          'font-family': "'JetBrains Mono Variable', ui-monospace, monospace",
           width: (ele: any) => nodeSize(metrics.scores.get(ele.data('id')) ?? 0),
           height: (ele: any) => nodeSize(metrics.scores.get(ele.data('id')) ?? 0),
           'min-zoomed-font-size': 9,
@@ -210,7 +242,8 @@ export function GraphPage() {
         style: {
           width: (ele: { data: (k: string) => number }) =>
             Math.min(1 + Math.log2(1 + (ele.data('packets') ?? 1)), 6),
-          'line-color': (ele: { data: (k: string) => any }) => edgeColor(ele.data('type')),
+          'line-color': (ele: { data: (k: string) => any }) =>
+            edgeColor(ele.data('type'), palette),
           'target-arrow-shape': 'triangle',
           'arrow-scale': 0.7,
           'curve-style': curveStyle,
@@ -300,7 +333,7 @@ export function GraphPage() {
       }
       cy.style().fromJson(cyStyle)
     }
-  }, [visible, tier, metrics, graph, effectiveCaptureId])
+  }, [visible, tier, metrics, graph, effectiveCaptureId, palette, theme])
 
   // container ref may not be mounted on first effect run for a new capture
   useEffect(() => {
@@ -357,9 +390,9 @@ export function GraphPage() {
           <div className="mt-2 mb-1 font-medium text-fg-muted">Nodes</div>
           {(
             [
-              ['host', 'host', '#38bdf8'],
-              ['domain', 'domain', '#a78bfa'],
-              ['service', 'service', '#34d399'],
+              ['host', 'host', nodeBorderColor('host', theme)],
+              ['domain', 'domain', nodeBorderColor('domain', theme)],
+              ['service', 'service', nodeBorderColor('service', theme)],
             ] as const
           ).map(([type, label, ring]) => {
             const active = type === 'host' || nodeFilters.has(type)

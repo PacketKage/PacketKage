@@ -7,8 +7,9 @@
 /* so dark/light theming is a variable swap, not a class sweep.         */
 /* ------------------------------------------------------------------ */
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+  --color-bg: var(--bg);  --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-border: var(--border);
@@ -88,7 +89,80 @@ body,
 }
 
 body {
-  @apply bg-bg text-fg antialiased;
+  @apply bg-bg text-fg antialiased font-sans;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ambient background — subtle accent glow + faint dot grid behind    */
+/* the app shell. Fixed + non-interactive; both themes stay readable. */
+/* ------------------------------------------------------------------ */
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(
+      52rem 30rem at 50% -8rem,
+      color-mix(in oklab, var(--accent) 7%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40rem 24rem at 85% 110%,
+      color-mix(in oklab, var(--info) 4%, transparent),
+      transparent 70%
+    );
+}
+body::after {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--fg) 5%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(60rem 40rem at 50% 0%, black, transparent 75%);
+  mask-image: radial-gradient(60rem 40rem at 50% 0%, black, transparent 75%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-enter {
+    animation: none;
+  }
+}
+
+/* Modal entrance — fade + slight scale-up; reduced-motion skips it */
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.modal-backdrop {
+  animation: modal-fade-in 0.18s ease-out both;
+}
+.modal-enter {
+  animation: modal-pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop {
+    animation: none;
+  }
 }
 
 /* Visible focus for keyboard users (customize) */

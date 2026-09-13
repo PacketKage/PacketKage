@@ -82,7 +82,11 @@ export function Dashboard() {
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-3">
             <div
               className="h-full rounded-full bg-warning transition-all"
-              style={{ width: `${activeJob.progress}%` }}
+              style={{
+                width: `${activeJob.progress}%`,
+                backgroundImage:
+                  'repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in oklab, var(--bg) 18%, transparent) 6px, color-mix(in oklab, var(--bg) 18%, transparent) 12px)',
+              }}
             />
           </div>
         </div>
@@ -185,9 +189,9 @@ function CaptureRow({ capture }: { capture: Capture }) {
       <td className="px-4 py-2.5">
         <StatusPill status={capture.status} />
       </td>
-      <td className="px-4 py-2.5 text-fg-muted">{capture.packet_count.toLocaleString()}</td>
-      <td className="px-4 py-2.5 text-fg-muted">{formatBytes(capture.size_bytes)}</td>
-      <td className="px-4 py-2.5 text-fg-muted">
+      <td className="px-4 py-2.5 font-mono text-fg-muted tabular-nums">{capture.packet_count.toLocaleString()}</td>
+      <td className="px-4 py-2.5 font-mono text-fg-muted tabular-nums">{formatBytes(capture.size_bytes)}</td>
+      <td className="px-4 py-2.5 font-mono text-fg-muted tabular-nums">
         {formatDuration(capture.first_packet_ts, capture.last_packet_ts)}
       </td>
       <td className="px-4 py-2.5 text-fg-muted">{capture.parser_used ?? '—'}</td>
@@ -220,7 +224,7 @@ function FlowStat({
         <span className="text-xs uppercase tracking-wider text-fg-subtle">{label}</span>
       </div>
       <div
-        className={`mt-1 text-xl font-semibold ${
+        className={`mt-1 text-xl font-semibold tabular-nums ${
           tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-warning' : 'text-fg'
         }`}
       >
@@ -249,7 +253,7 @@ function StatCard({
           }`}
         />
       </div>
-      <div className="mt-2 text-2xl font-semibold text-fg">{value}</div>
+      <div className="mt-2 text-2xl font-semibold tabular-nums text-fg">{value}</div>
     </div>
   )
 }

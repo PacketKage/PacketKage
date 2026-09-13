@@ -284,28 +284,28 @@ function FlowsTable({
       }),
       col.accessor('packets', {
         header: 'Packets',
-        cell: (c) => <span className="text-fg-muted">{c.getValue().toLocaleString()}</span>,
+        cell: (c) => <span className="font-mono text-fg-muted tabular-nums">{c.getValue().toLocaleString()}</span>,
       }),
       col.accessor('bytes', {
         header: 'Bytes',
-        cell: (c) => <span className="text-fg-muted">{formatBytes(c.getValue())}</span>,
+        cell: (c) => <span className="font-mono text-fg-muted tabular-nums">{formatBytes(c.getValue())}</span>,
       }),
       col.accessor('retransmissions', {
         header: 'Retrans',
         cell: (c) =>
           c.getValue() > 0 ? (
-            <span className="text-warning">{c.getValue()}</span>
+            <span className="font-mono text-warning tabular-nums">{c.getValue()}</span>
           ) : (
-            <span className="text-fg-subtle">0</span>
+            <span className="font-mono text-fg-subtle tabular-nums">0</span>
           ),
       }),
       col.accessor('resets', {
         header: 'Resets',
         cell: (c) =>
           c.getValue() > 0 ? (
-            <span className="text-danger">{c.getValue()}</span>
+            <span className="font-mono text-danger tabular-nums">{c.getValue()}</span>
           ) : (
-            <span className="text-fg-subtle">0</span>
+            <span className="font-mono text-fg-subtle tabular-nums">0</span>
           ),
       }),
       col.display({

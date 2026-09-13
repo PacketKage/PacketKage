@@ -65,7 +65,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-8 backdrop-blur-sm modal-backdrop"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -73,9 +73,9 @@ export function Modal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`max-h-[85vh] w-full ${
+        className={`modal-enter max-h-[85vh] w-full ${
           wide ? 'max-w-4xl' : 'max-w-2xl'
-        } overflow-hidden rounded-xl border border-border-strong bg-surface-2/50 shadow-2xl focus:outline-none`}
+        } overflow-hidden rounded-2xl border border-border-strong bg-surface shadow-2xl shadow-black/30 focus:outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">

@@ -57,7 +57,7 @@ export function Pagination({
       ref={topRef}
       className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-fg-muted"
     >
-      <span>
+      <span className="tabular-nums">
         {total.toLocaleString()} records · page {page} of {pageCount}
       </span>
       <div className="flex gap-2">
