@@ -12,6 +12,7 @@ from app.db.orm import (
     CaseModel,
     DNSTransactionModel,
     FlowModel,
+    GraphEdgeModel,
     HostModel,
     HTTPTransactionModel,
     PacketModel,
@@ -633,3 +634,90 @@ class CaseRepository:
         self.db.delete(case)
         self.db.commit()
         return True
+
+
+# Evidence-graph relationship types the repository accepts as filters.
+GRAPH_RELATIONSHIPS = {
+    "DNS_QUERY", "RESOLVES_TO", "TLS_SNI", "HTTP_HOST", "FLOW",
+    "EXPOSES", "TRIGGERED", "TARGETS", "GROUPS", "INCLUDES",
+}
+GRAPH_PROVENANCE = {"observed", "correlated", "enriched"}
+
+
+class GraphEdgeRepository:
+    """Evidence-graph edges: SQL-filtered, capped reads + build-time persistence."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create_many(self, capture_id: str, rows: list[GraphEdgeModel]) -> list[GraphEdgeModel]:
+        self.db.add_all(rows)
+        self.db.commit()
+        return rows
+
+    def get(self, edge_id: str) -> GraphEdgeModel | None:
+        return self.db.get(GraphEdgeModel, edge_id)
+
+    def delete_for_capture(self, capture_id: str) -> int:
+        result = self.db.execute(
+            delete(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id)
+        )
+        self.db.commit()
+        return result.rowcount or 0
+
+    def count_for_capture(self, capture_id: str) -> int:
+        return int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(GraphEdgeModel)
+                .where(GraphEdgeModel.capture_id == capture_id)
+            )
+            or 0
+        )
+
+    def list_for_capture(
+        self,
+        capture_id: str,
+        *,
+        relationships: list[str] | None = None,
+        provenance: list[str] | None = None,
+        after: float | None = None,
+        before: float | None = None,
+        with_alerts_only: bool = False,
+        node_id: str | None = None,
+        max_edges: int = 4000,
+    ) -> list[GraphEdgeModel]:
+        """Filtered edge read for ONE capture, capped at max_edges rows.
+
+        Time window uses interval overlap: an edge matches when its
+        [first_seen, last_seen] intersects [after, before]. All filtering
+        happens in SQL so large captures stay bounded.
+        """
+        stmt = select(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id)
+        if relationships:
+            stmt = stmt.where(GraphEdgeModel.relationship.in_(relationships))
+        if provenance:
+            stmt = stmt.where(GraphEdgeModel.provenance.in_(provenance))
+        if after is not None:
+            stmt = stmt.where(GraphEdgeModel.last_seen >= after)
+        if before is not None:
+            stmt = stmt.where(GraphEdgeModel.first_seen <= before)
+        if with_alerts_only:
+            stmt = stmt.where(func.json_array_length(GraphEdgeModel.alert_ids) > 0)
+        if node_id:
+            stmt = stmt.where(
+                (GraphEdgeModel.source_id == node_id)
+                | (GraphEdgeModel.target_id == node_id)
+            )
+        stmt = stmt.order_by(
+            GraphEdgeModel.last_seen.desc(), GraphEdgeModel.source_id
+        ).limit(max_edges)
+        return list(self.db.scalars(stmt))
+
+    def touching_ids(self, capture_id: str, edges: list[GraphEdgeModel]) -> set[str]:
+        """Node ids referenced by the given edges (for capped subgraph assembly)."""
+        ids: set[str] = set()
+        for e in edges:
+            ids.add(e.source_id)
+            ids.add(e.target_id)
+        return ids

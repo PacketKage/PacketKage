@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import cytoscape, { type Core, type ElementDefinition } from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { api } from '../api/client'
 import { CapturePicker } from '../components/CapturePicker'
 import { ErrorState } from '../components/states'
-import { SkeletonRow, formatBytes } from '../components/ui'
+import { Modal } from '../components/Modal'
+import { Badge, SkeletonRow, Spinner } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useTheme } from '../hooks/theme'
 import type { Graph, GraphNodeData } from '../types/api'
+import {
+  EdgeProvenancePanel,
+  EvidenceChainList,
+  NodeDetailPanel,
+} from './graph-v2-panels'
 import {
   computeNodeMetrics,
   computeTier,
@@ -109,11 +114,406 @@ interface VisibleElements {
   tier: 'detail' | 'balanced' | 'scale'
 }
 
+export type GraphMode = 'investigate' | 'attack-path' | 'blast' | 'timeline' | 'evidence'
+
+const MODES: { id: GraphMode; label: string }[] = [
+  { id: 'investigate', label: 'Investigate' },
+  { id: 'attack-path', label: 'Attack Path' },
+  { id: 'blast', label: 'Blast Radius' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'evidence', label: 'Evidence' },
+]
+
+/**
+ * Graph 2.0 workspace: five investigation modes over one capture.
+ * - investigate: the proven v1 canvas (tier engine, filters, legend) +
+ *   v2 provenance panels on edge/node selection
+ * - attack-path / blast: bounded v2 traversals rendered as focused lists
+ * - timeline / evidence: existing data viewed through the investigation lens
+ */
 export function GraphPage() {
+  // capture selection lives HERE (single source of truth) — child modes
+  // receive the effective id as a prop so the picker and all modes agree
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const [mode, setMode] = useState<GraphMode>('investigate')
+
+  return (
+    <div className="flex h-full flex-col p-8">
+      {/* header: title + capture picker */}
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        <h1 className="text-2xl font-semibold text-fg">Network Graph</h1>
+        {analyzed.length > 0 && (
+          <span className="text-xs text-fg-subtle">
+            Evidence-backed investigation workspace
+          </span>
+        )}
+        <div className="ml-auto">
+          <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
+        </div>
+      </div>
+
+      {/* mode toolbar */}
+      <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Graph investigation modes">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            role="tab"
+            aria-selected={mode === m.id}
+            onClick={() => setMode(m.id)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition ${
+              mode === m.id
+                ? 'bg-accent-soft text-accent ring-accent-ring'
+                : 'text-fg-muted ring-border-strong hover:text-fg'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* mode content */}
+      <div className="min-h-0 flex-1">
+        {mode === 'investigate' && (
+          <InvestigateCanvas onModeChange={setMode} captureId={effectiveCaptureId} />
+        )}
+        {mode === 'attack-path' && <AttackPathMode captureId={effectiveCaptureId} />}
+        {mode === 'blast' && <BlastRadiusMode captureId={effectiveCaptureId} />}
+        {mode === 'timeline' && <TimelineMode captureId={effectiveCaptureId} />}
+        {mode === 'evidence' && <EvidenceMode captureId={effectiveCaptureId} />}
+      </div>
+    </div>
+  )
+}
+
+// ---------------- Attack Path mode ----------------
+
+function AttackPathMode({ captureId }: { captureId: string | null }) {
+  const { data: graph } = useQuery({
+    queryKey: ['evidenceGraph', captureId],
+    queryFn: () => api.getEvidenceGraph(captureId!),
+    enabled: !!captureId,
+  })
+  const hosts = (graph?.nodes ?? []).filter((n) => n.kind === 'host')
+  const [source, setSource] = useState('')
+  const [target, setTarget] = useState('')
+  const [query, setQuery] = useState<{ source: string; target: string } | null>(null)
+
+  const { data: paths, isLoading, isError } = useQuery({
+    queryKey: ['graphPaths', captureId, query?.source, query?.target],
+    queryFn: () => api.getGraphPaths(captureId!, query!.source, query!.target),
+    enabled: !!query && !!captureId,
+  })
+
+  if (!graph) {
+    return (
+      <div className="flex h-full min-h-[240px] items-center justify-center">
+        <Spinner size={24} />
+      </div>
+    )
+  }
+  if (!hosts.length) {
+    return <ErrorlessEmpty text="No hosts in this capture — nothing to traverse." />
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-2/50 p-4">
+        <label className="text-xs text-fg-subtle">
+          Source host
+          <select
+            aria-label="Source host"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
+          >
+            <option value="">select…</option>
+            {hosts.map((h) => (
+              <option key={h.id} value={h.id}>{h.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-fg-subtle">
+          Target host
+          <select
+            aria-label="Target host"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
+          >
+            <option value="">select…</option>
+            {hosts.map((h) => (
+              <option key={h.id} value={h.id}>{h.label}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          disabled={!source || !target || source === target}
+          onClick={() => setQuery({ source, target })}
+          className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
+        >
+          Find paths
+        </button>
+        <p className="ml-auto max-w-sm text-xs text-fg-subtle">
+          Bounded traversal (depth ≤ 4, max 3 paths) over observed relationships
+          only — the path itself is an inference, every hop is evidence.
+        </p>
+      </div>
+
+      {isLoading && <div className="p-6 text-center"><Spinner size={20} /></div>}
+      {isError && <ErrorState message="Path search failed." />}
+      {paths && (
+        <div className="space-y-3">
+          {paths.paths.length === 0 && (
+            <ErrorlessEmpty
+              text={
+                paths.reason === 'unknown node'
+                  ? 'One of the selected hosts has no observed relationships.'
+                  : `No path of observed relationships connects these hosts within depth 4.`
+              }
+            />
+          )}
+          {paths.paths.map((p, i) => (
+            <div key={i} className="rounded-xl border border-border bg-surface-2/50 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <Badge tone="accent">path {i + 1}</Badge>
+                <Badge tone="neutral">{p.length} hop{p.length === 1 ? '' : 's'}</Badge>
+                <Badge tone="warning">inferred</Badge>
+              </div>
+              <ol className="flex flex-wrap items-center gap-2">
+                {p.nodes.map((nid, j) => {
+                  const node = graph.nodes.find((n) => n.id === nid)
+                  return (
+                    <li key={nid} className="flex items-center gap-2">
+                      <span className="rounded-lg bg-surface-3/60 px-2 py-1 font-mono text-xs text-fg-muted ring-1 ring-border">
+                        {node?.label ?? nid}
+                      </span>
+                      {j < p.nodes.length - 1 && <span className="text-fg-subtle">→</span>}
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          ))}
+          {paths.truncated && (
+            <p className="text-xs text-fg-subtle">Traversal hit its bound — more paths may exist.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------- Blast Radius mode ----------------
+
+function BlastRadiusMode({ captureId }: { captureId: string | null }) {
+  const { data: graph } = useQuery({
+    queryKey: ['evidenceGraph', captureId],
+    queryFn: () => api.getEvidenceGraph(captureId!),
+    enabled: !!captureId,
+  })
+  const hosts = (graph?.nodes ?? []).filter((n) => n.kind === 'host')
+  const [host, setHost] = useState('')
+  const [depth, setDepth] = useState(2)
+  const [query, setQuery] = useState<{ host: string; depth: number } | null>(null)
+
+  const { data: blast, isLoading, isError } = useQuery({
+    queryKey: ['graphBlast', captureId, query?.host, query?.depth],
+    queryFn: () => api.getGraphBlast(captureId!, query!.host, query!.depth),
+    enabled: !!query && !!captureId,
+  })
+
+  if (!graph) {
+    return (
+      <div className="flex h-full min-h-[240px] items-center justify-center">
+        <Spinner size={24} />
+      </div>
+    )
+  }
+  if (!hosts.length) {
+    return <ErrorlessEmpty text="No hosts in this capture — no blast radius to compute." />
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-2/50 p-4">
+        <label className="text-xs text-fg-subtle">
+          Start host
+          <select
+            aria-label="Blast radius start host"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
+          >
+            <option value="">select…</option>
+            {hosts.map((h) => (
+              <option key={h.id} value={h.id}>{h.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-fg-subtle">
+          Depth
+          <select
+            aria-label="Blast radius depth"
+            value={depth}
+            onChange={(e) => setDepth(Number(e.target.value))}
+            className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+          </select>
+        </label>
+        <button
+          disabled={!host}
+          onClick={() => setQuery({ host, depth })}
+          className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
+        >
+          Compute blast radius
+        </button>
+        <p className="ml-auto max-w-sm text-xs text-fg-subtle">
+          Bounded BFS (depth ≤ 3, node caps) over observed relationships —
+          reachability summary only, no simulated impact.
+        </p>
+      </div>
+
+      {isLoading && <div className="p-6 text-center"><Spinner size={20} /></div>}
+      {isError && <ErrorState message="Blast radius request failed." />}
+      {blast && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <SummaryCard label="Reachable nodes" value={blast.summary.reachable_nodes} />
+            <SummaryCard label="Alert-flagged" value={blast.summary.alert_flagged.length} tone="red" />
+            <SummaryCard label="Hosts" value={blast.summary.by_kind.host ?? 0} />
+            <SummaryCard label="Domains" value={blast.summary.by_kind.domain ?? 0} />
+          </div>
+          {Object.entries(blast.rings)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([ring, ids]) => (
+              <div key={ring} className="rounded-xl border border-border bg-surface-2/50 p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
+                  Hop {ring} — {ids.length} node{ids.length === 1 ? '' : 's'}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ids.map((nid) => {
+                    const node = graph.nodes.find((n) => n.id === nid)
+                    const flagged = blast.summary.alert_flagged.includes(nid)
+                    return (
+                      <span
+                        key={nid}
+                        className={`rounded-lg px-2 py-1 font-mono text-xs ring-1 ${
+                          flagged
+                            ? 'bg-danger/10 text-danger ring-danger/30'
+                            : 'bg-surface-3/60 text-fg-muted ring-border'
+                        }`}
+                      >
+                        {node?.label ?? nid}
+                        {flagged ? ' ⚠' : ''}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          {blast.truncated && (
+            <p className="text-xs text-warning">
+              Result hit the node cap — increase filters or reduce depth for full coverage.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: 'red' }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface-2/50 p-3">
+      <div className="text-xs uppercase tracking-wider text-fg-subtle">{label}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${tone === 'red' ? 'text-danger' : 'text-fg'}`}>
+        {value.toLocaleString()}
+      </div>
+    </div>
+  )
+}
+
+// ---------------- Timeline mode ----------------
+
+function TimelineMode({ captureId }: { captureId: string | null }) {
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['graphTimeline', captureId],
+    queryFn: () => api.getTimeline(captureId!, { limit: 500 }),
+    enabled: !!captureId,
+  })
+  if (isLoading) return <div className="p-6 text-center"><Spinner size={20} /></div>
+  if (isError) return <ErrorState message="Timeline request failed." onRetry={() => void refetch()} />
+  if (!data) return <ErrorlessEmpty text="Select an analyzed capture." />
+  const events = data.items
+  if (!events.length) {
+    return <ErrorlessEmpty text="No timeline events in this capture." />
+  }
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-surface-2/50">
+      <div className="border-b border-border px-4 py-3 text-sm font-medium text-fg">
+        Chronological event stream ({data.total.toLocaleString()} events, showing first {events.length})
+      </div>
+      <div className="max-h-[60vh] divide-y divide-border/60 overflow-y-auto">
+        {events.map((ev) => (
+          <div key={ev.id} className="flex items-center gap-3 px-4 py-2 text-xs">
+            <span className="w-20 shrink-0 font-mono tabular-nums text-fg-subtle">
+              {new Date(ev.timestamp * 1000).toLocaleTimeString()}
+            </span>
+            <Badge tone={ev.severity === 'critical' || ev.severity === 'high' ? 'danger' : ev.severity === 'medium' ? 'warning' : 'neutral'}>
+              {ev.event_type}
+            </Badge>
+            <span className="min-w-0 flex-1 truncate text-fg-muted">{ev.label}</span>
+            {ev.related_alert_id && (
+              <span className="shrink-0 font-mono text-fg-subtle">alert {ev.related_alert_id.slice(0, 8)}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------- Evidence mode ----------------
+
+function EvidenceMode({ captureId }: { captureId: string | null }) {
+  const { data: graph, isLoading, isError, refetch } = useQuery({
+    queryKey: ['evidenceGraph', captureId],
+    queryFn: () => api.getEvidenceGraph(captureId!),
+    enabled: !!captureId,
+  })
+  if (isLoading) return <div className="p-6 text-center"><Spinner size={20} /></div>
+  if (isError) return <ErrorState message="Evidence graph request failed." onRetry={() => void refetch()} />
+  if (!graph) return <ErrorlessEmpty text="Select an analyzed capture." />
+  return (
+    <div className="max-h-full overflow-y-auto pr-1">
+      <EvidenceChainList graph={graph} captureId={captureId!} />
+    </div>
+  )
+}
+
+function ErrorlessEmpty({ text }: { text: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-muted">
+      {text}
+    </div>
+  )
+}
+
+// ---------------- Investigate canvas (v1 engine + v2 panels) ----------------
+
+function InvestigateCanvas({
+  onModeChange,
+  captureId: effectiveCaptureId,
+}: {
+  onModeChange: (mode: GraphMode) => void
+  captureId: string | null
+}) {
+  const { analyzed } = useSelectedCapture()
   const { theme } = useTheme()
   const palette = theme === 'light' ? LIGHT_PALETTE : DARK_PALETTE
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [edgeFilters, setEdgeFilters] = useState<Set<string> | null>(null)
   const [nodeFilters, setNodeFilters] = useState<Set<string>>(
     () => new Set(['domain', 'service']),
@@ -122,6 +522,13 @@ export function GraphPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const cyCaptureRef = useRef<string | null>(null)
+
+  // v2 evidence graph (parallel load): powers edge provenance + node panels
+  const { data: v2 } = useQuery({
+    queryKey: ['evidenceGraph', effectiveCaptureId],
+    queryFn: () => api.getEvidenceGraph(effectiveCaptureId!),
+    enabled: !!effectiveCaptureId,
+  })
 
   const { data: graph, isError, refetch } = useQuery({
     queryKey: ['graph', effectiveCaptureId],
@@ -268,7 +675,17 @@ export function GraphPage() {
       cy.on('tap', 'node', (e) => {
         setSelectedNode(e.target.data() as GraphNodeData)
       })
-      cy.on('tap', 'edge', () => setSelectedNode(null))
+      // edge tap → provenance modal (v2 lookup by pair+relationship)
+      cy.on('tap', 'edge', (e) => {
+        const d = e.target.data()
+        setSelectedNode(null)
+        setSelectedEdgeId(null)
+        // v1 edge id: "src->dst:TYPE" — find the matching v2 edge
+        const match = v2?.edges.find(
+          (x) => x.source === `host:${d.source}` && x.target === `host:${d.target}` && x.relationship === 'FLOW',
+        )
+        if (match) setSelectedEdgeId(match.id)
+      })
       cy.on('mouseover', 'node', (e) => e.target.addClass('highlighted'))
       cy.on('mouseout', 'node', (e) => e.target.removeClass('highlighted'))
       cyRef.current = cy
@@ -333,7 +750,7 @@ export function GraphPage() {
       }
       cy.style().fromJson(cyStyle)
     }
-  }, [visible, tier, metrics, graph, effectiveCaptureId, palette, theme])
+  }, [visible, tier, metrics, graph, effectiveCaptureId, palette, theme, v2])
 
   // container ref may not be mounted on first effect run for a new capture
   useEffect(() => {
@@ -345,24 +762,20 @@ export function GraphPage() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col p-8">
-      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-        <h1 className="text-2xl font-semibold text-fg">Network Graph</h1>
-        {graph && (
-          <span className="text-xs text-fg-subtle">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* mode-scoped stats line */}
+      {graph && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
+          <span>
             {graph.stats.host_count} hosts · {graph.stats.domain_count} domains ·{' '}
             {graph.stats.service_count} services · {graph.stats.edge_count} edges
-            <span className="ml-2 rounded bg-surface-3 px-1.5 py-0.5 text-xs text-fg-muted">
-              {tier}
-            </span>
           </span>
-        )}
-        <div className="ml-auto">
-          <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
+          <span className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-muted">{tier}</span>
+          <span className="ml-auto">click an edge for provenance · click a node for detail</span>
         </div>
-      </div>
+      )}
 
-      <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-bg">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-bg">
         <div ref={containerRef} className="h-full w-full" />
 
         {/* legend / filters */}
@@ -468,46 +881,45 @@ export function GraphPage() {
           </div>
         )}
 
-        {/* Node detail panel */}
-        {selectedNode && (
-          <div className="absolute right-3 top-3 z-10 w-72 rounded-xl border border-border-strong bg-surface-2/95 p-4 shadow-xl">
-            <div className="mb-2 flex items-start justify-between">
-              <div className="font-mono text-sm font-semibold text-fg">
-                {selectedNode.id}
-              </div>
-              <button onClick={() => setSelectedNode(null)} aria-label="Close" className="text-fg-subtle hover:text-fg-muted">
-                <X size={16} aria-hidden />
-              </button>
-            </div>
-            <div className="space-y-1.5 text-xs">
-              <Row label="Type" value={selectedNode.type ?? '—'} />
-              {selectedNode.hostname && <Row label="Hostname" value={selectedNode.hostname} />}
-              {selectedNode.role && <Row label="Role" value={selectedNode.role} />}
-              {selectedNode.type === 'host' && (
-                <>
-                  <Row
-                    label="Traffic"
-                    value={`↑ ${formatBytes(selectedNode.bytes_sent ?? 0)} · ↓ ${formatBytes(
-                      selectedNode.bytes_received ?? 0,
-                    )}`}
-                  />
-                  <Row
-                    label="Alerts"
-                    value={String(selectedNode.alert_count ?? 0)}
-                    tone={(selectedNode.alert_count ?? 0) > 0 ? 'red' : undefined}
-                  />
-                </>
-              )}
-              {selectedNode.type === 'service' && (
-                <>
-                  <Row label="Service" value={selectedNode.service ?? '—'} />
-                  <Row label="Port" value={String(selectedNode.port ?? '—')} />
-                </>
-              )}
-            </div>
+        {/* Node detail panel (v2: hydrates from source tables + mode actions) */}
+        {selectedNode && effectiveCaptureId && (
+          <div className="absolute right-3 top-3 z-10 w-80 rounded-xl border border-border-strong bg-surface-2/95 shadow-xl">
+            <NodeDetailPanel
+              nodeId={`host:${selectedNode.id}`}
+              captureId={effectiveCaptureId}
+              onClose={() => setSelectedNode(null)}
+              onBlast={() => {
+                setSelectedNode(null)
+                onModeChange('blast')
+              }}
+              onPath={() => {
+                setSelectedNode(null)
+                onModeChange('attack-path')
+              }}
+            />
           </div>
         )}
       </div>
+
+      {/* Edge provenance modal (v2) */}
+      {selectedEdgeId && effectiveCaptureId && v2 && (
+        <Modal
+          title="Relationship provenance"
+          subtitle={
+            v2.edges.find((e) => e.id === selectedEdgeId)
+              ? `${v2.edges.find((e) => e.id === selectedEdgeId)!.source} → ${v2.edges.find((e) => e.id === selectedEdgeId)!.target}`
+              : undefined
+          }
+          onClose={() => setSelectedEdgeId(null)}
+        >
+          <div className="p-5">
+            <EdgeProvenancePanel
+              edge={v2.edges.find((e) => e.id === selectedEdgeId)!}
+              captureId={effectiveCaptureId}
+            />
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -528,15 +940,4 @@ function toggleInSet(current: Iterable<string>, name: string): Set<string> {
     next.add(name)
   }
   return next
-}
-
-function Row({ label, value, tone }: { label: string; value: string; tone?: 'red' }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <span className="text-fg-subtle">{label}</span>
-      <span className={`font-mono ${tone === 'red' ? 'text-danger' : 'text-fg-muted'}`}>
-        {value}
-      </span>
-    </div>
-  )
 }

@@ -386,6 +386,135 @@ export interface Graph {
   }
 }
 
+// ---- Evidence Graph 2.0 (v2) ----
+
+export type GraphNodeKind = 'host' | 'domain' | 'service' | 'alert' | 'incident' | 'case' | 'capture'
+export type GraphProvenance = 'observed' | 'correlated' | 'enriched'
+
+export interface GraphV2Node {
+  id: string
+  kind: GraphNodeKind
+  label: string
+  ip?: string | null
+  internal?: boolean | null
+  role?: string | null
+  hostname?: string | null
+  port?: number | null
+  first_seen?: number | null
+  last_seen?: number | null
+  bytes_sent?: number | null
+  bytes_received?: number | null
+  alert_count?: number | null
+  rule_name?: string | null
+  severity?: string | null
+  score?: number | null
+  reasons?: { reason: string; detail: string; weight: number }[]
+  explanation?: string | null
+  mitre?: { technique_id: string; technique: string; tactic: string } | null
+  status?: string | null
+  filename?: string | null
+  packet_count?: number | null
+}
+
+export interface GraphV2EdgeEvidenceFlow {
+  id: string
+  source_ip: string
+  destination_ip: string
+  destination_port: number
+  transport_protocol: string
+  application_protocol: string | null
+  packets: number
+  bytes: number
+  first_seen: number
+  last_seen: number
+}
+
+export interface GraphV2EdgeEvidenceAlert {
+  id: string
+  rule_name: string
+  title: string
+  severity: string
+  score: number
+  reasons: { reason: string; detail: string; weight: number }[]
+  explanation: string | null
+  destination_port: number | null
+  timestamp: number | null
+  mitre?: { technique_id: string; technique: string; tactic: string } | null
+}
+
+export interface GraphV2Edge {
+  id: string
+  source: string
+  target: string
+  relationship: string
+  provenance: GraphProvenance
+  first_seen: number
+  last_seen: number
+  count: number
+  packets: number
+  bytes: number
+  protocol?: string | null
+  port?: number | null
+  flow_ids: string[]
+  alert_ids: string[]
+  packet_refs: number[]
+  explanation?: string | null
+  flows?: GraphV2EdgeEvidenceFlow[]
+  alerts?: GraphV2EdgeEvidenceAlert[]
+}
+
+export interface GraphV2 {
+  nodes: GraphV2Node[]
+  edges: GraphV2Edge[]
+  stats: {
+    edge_count: number
+    total_edges_in_capture: number
+    node_count: number
+    relationships: string[]
+    provenance_classes: GraphProvenance[]
+    alert_backed_edges: number
+  }
+  truncated: boolean
+}
+
+export interface GraphV2NodeDetail {
+  node: GraphV2Node
+  edges: GraphV2Edge[]
+  stats: { edge_count: number; alert_backed_edges: number }
+}
+
+export interface GraphV2Paths {
+  paths: { nodes: string[]; length: number }[]
+  visited: number
+  truncated: boolean
+  reason?: string | null
+}
+
+export interface GraphV2Blast {
+  start: string
+  depth: number
+  nodes: string[]
+  rings: Record<string, string[]>
+  edges: {
+    source: string
+    target: string
+    relationship: string
+    provenance: GraphProvenance
+    first_seen: number
+    last_seen: number
+    alert_ids: string[]
+  }[]
+  summary: {
+    reachable_nodes: number
+    by_kind: Record<string, number>
+    alert_flagged: string[]
+    node_cap: number
+    hard_cap: number
+  }
+  truncated: boolean
+  reason?: string | null
+}
+
 export interface EngineerIssue {
   issue: string
   severity: 'high' | 'medium' | 'low' | 'info'

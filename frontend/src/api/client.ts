@@ -8,6 +8,12 @@ import type {
   Flow,
   FlowDetail,
   Graph,
+  GraphProvenance,
+  GraphV2,
+  GraphV2Blast,
+  GraphV2Edge,
+  GraphV2NodeDetail,
+  GraphV2Paths,
   HTTPTransaction,
   Host,
   Job,
@@ -259,6 +265,53 @@ export const api = {
   },
 
   getGraph: (captureId: string) => request<Graph>(`/graph?capture_id=${captureId}`),
+
+  // Evidence Graph 2.0 (v2) — provenance-carrying investigation graph
+  getEvidenceGraph: (
+    captureId: string,
+    filters?: {
+      relationships?: string[]
+      provenance?: GraphProvenance[]
+      after?: number
+      before?: number
+      minAlerts?: number
+      nodeId?: string
+      limit?: number
+    },
+  ) => {
+    const params = new URLSearchParams({ capture_id: captureId })
+    if (filters?.relationships?.length)
+      params.set('relationships', filters.relationships.join(','))
+    if (filters?.provenance?.length) params.set('provenance', filters.provenance.join(','))
+    if (filters?.after !== undefined) params.set('after', String(filters.after))
+    if (filters?.before !== undefined) params.set('before', String(filters.before))
+    if (filters?.minAlerts) params.set('min_alerts', String(filters.minAlerts))
+    if (filters?.nodeId) params.set('node_id', filters.nodeId)
+    if (filters?.limit) params.set('limit', String(filters.limit))
+    return request<GraphV2>(`/graph/v2?${params}`)
+  },
+
+  getGraphNode: (captureId: string, nodeId: string) => {
+    const params = new URLSearchParams({ capture_id: captureId, node_id: nodeId })
+    return request<GraphV2NodeDetail>(`/graph/v2/node?${params}`)
+  },
+
+  getGraphEdge: (captureId: string, edgeId: string) =>
+    request<GraphV2Edge>(`/graph/v2/edge/${edgeId}?capture_id=${captureId}`),
+
+  getGraphPaths: (captureId: string, source: string, target: string) => {
+    const params = new URLSearchParams({ capture_id: captureId, source, target })
+    return request<GraphV2Paths>(`/graph/v2/paths?${params}`)
+  },
+
+  getGraphBlast: (captureId: string, host: string, depth = 2) => {
+    const params = new URLSearchParams({
+      capture_id: captureId,
+      host,
+      depth: String(depth),
+    })
+    return request<GraphV2Blast>(`/graph/v2/blast?${params}`)
+  },
 
   getReplay: (captureId: string, after?: number) => {
     const params = new URLSearchParams({ capture_id: captureId })

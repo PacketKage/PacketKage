@@ -296,3 +296,93 @@ class GraphOut(BaseModel):
     nodes: list[GraphElement]
     edges: list[GraphElement]
     stats: dict[str, Any] = Field(default_factory=dict)
+
+
+# ---- Evidence Graph 2.0 (v2) -------------------------------------------------
+
+
+class GraphV2Node(BaseModel):
+    """Hydrated node — metadata comes from the owning source table."""
+
+    id: str
+    kind: str  # host | domain | service | alert | incident | case | capture
+    label: str
+    ip: str | None = None
+    internal: bool | None = None
+    role: str | None = None
+    hostname: str | None = None
+    port: int | None = None
+    first_seen: float | None = None
+    last_seen: float | None = None
+    bytes_sent: int | None = None
+    bytes_received: int | None = None
+    alert_count: int | None = None
+    rule_name: str | None = None
+    severity: str | None = None
+    score: int | None = None
+    reasons: list[dict[str, Any]] = Field(default_factory=list)
+    explanation: str | None = None
+    mitre: dict[str, str] | None = None
+    status: str | None = None
+    filename: str | None = None
+    packet_count: int | None = None
+
+
+class GraphV2Edge(BaseModel):
+    """Evidence-backed relationship with full provenance."""
+
+    id: str
+    source: str
+    target: str
+    relationship: str
+    provenance: str  # observed | correlated | enriched
+    first_seen: float
+    last_seen: float
+    count: int = 0
+    packets: int = 0
+    bytes: int = 0
+    protocol: str | None = None
+    port: int | None = None
+    flow_ids: list[str] = Field(default_factory=list)
+    alert_ids: list[str] = Field(default_factory=list)
+    packet_refs: list[int] = Field(default_factory=list)
+    explanation: str | None = None
+    # evidence summary (edge detail endpoint)
+    flows: list[dict[str, Any]] = Field(default_factory=list)
+    alerts: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphV2Out(BaseModel):
+    nodes: list[GraphV2Node]
+    edges: list[GraphV2Edge]
+    stats: dict[str, Any] = Field(default_factory=dict)
+    truncated: bool = False
+
+
+class GraphV2NodeOut(BaseModel):
+    node: GraphV2Node
+    edges: list[GraphV2Edge]
+    stats: dict[str, Any] = Field(default_factory=dict)
+
+
+class GraphV2Path(BaseModel):
+    nodes: list[str]
+    length: int
+
+
+class GraphV2PathsOut(BaseModel):
+    paths: list[GraphV2Path]
+    visited: int = 0
+    truncated: bool = False
+    reason: str | None = None
+
+
+class GraphV2BlastOut(BaseModel):
+    start: str
+    depth: int
+    nodes: list[str]
+    rings: dict[str, list[str]] = Field(default_factory=dict)
+    edges: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    truncated: bool = False
+    reason: str | None = None

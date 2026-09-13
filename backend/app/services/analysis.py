@@ -19,6 +19,7 @@ from app.repositories import (
     CaptureRepository,
     DNSRepository,
     FlowRepository,
+    GraphEdgeRepository,
     HostRepository,
     HTTPRepository,
     JobRepository,
@@ -65,6 +66,7 @@ class AnalysisService:
         self.alerts = AlertRepository(db)
         self.timeline = TimelineRepository(db)
         self.packets = PacketRepository(db)
+        self.graph = GraphEdgeRepository(db)
 
     def run_full_analysis(
         self,
@@ -144,6 +146,17 @@ class AnalysisService:
                 flow_dicts_for_summary=flow_dicts, event_dicts=event_dicts,
                 alerts_already_persisted=True, alert_id_map=alert_id_map,
             )
+
+            # ---- Evidence graph materialization (Graph 2.0) ----
+            # Derived from the same persisted artifacts; incidents are read
+            # back from capture.summary (written by _persist_results above).
+            self.jobs.update(job, stage="evidence_graph", progress=99)
+            from app.services.evidence_graph import EvidenceGraphBuilder
+
+            self.graph.delete_for_capture(capture.id)
+            rows = EvidenceGraphBuilder(self.db).build(capture)
+            if rows:
+                self.graph.create_many(capture.id, rows)
 
             self.jobs.update(
                 job,

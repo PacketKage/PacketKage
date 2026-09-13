@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Float, Integer, String, Text
+from sqlalchemy import JSON, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -243,3 +243,41 @@ class CaseModel(Base):
     status: Mapped[str] = mapped_column(String(32), default="open")  # open | closed
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+class GraphEdgeModel(Base):
+    """Evidence-graph relationship (Graph 2.0) — materialized at analysis time.
+
+    Nodes are NOT duplicated into a table: they are stable string IDs
+    (``host:{ip}``, ``domain:{name}``, ``service:{ip}:{port}``, ``alert:{id}``,
+    ``incident:{source_ip}``, ``case:{id}``) hydrated at query time from the
+    source tables (hosts/flows/alerts/...). Every edge carries full provenance:
+    where it came from (relationship), how it is known (provenance class),
+    when (first/last seen) and the evidence IDs backing it (flow/alert/packet
+    references, capped at build time to keep rows bounded).
+    """
+
+    __tablename__ = "graph_edges"
+    __table_args__ = (
+        Index("ix_graph_edges_capture_source", "capture_id", "source_id"),
+        Index("ix_graph_edges_capture_target", "capture_id", "target_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    capture_id: Mapped[str] = mapped_column(String(32), index=True)
+    source_id: Mapped[str] = mapped_column(String(512))
+    target_id: Mapped[str] = mapped_column(String(512))
+    relationship: Mapped[str] = mapped_column(String(32))  # DNS_QUERY | RESOLVES_TO | TLS_SNI | HTTP_HOST | FLOW | EXPOSES | TRIGGERED | TARGETS | GROUPS | INCLUDES
+    provenance: Mapped[str] = mapped_column(String(16), default="observed")  # observed | correlated | enriched
+    first_seen: Mapped[float] = mapped_column(Float)
+    last_seen: Mapped[float] = mapped_column(Float)
+    count: Mapped[int] = mapped_column(Integer, default=0)  # contributing observations
+    packets: Mapped[int] = mapped_column(Integer, default=0)
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    protocol: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    flow_ids: Mapped[list] = mapped_column(JSON, default=list)  # capped (MAX_FLOW_REFS)
+    alert_ids: Mapped[list] = mapped_column(JSON, default=list)  # capped (MAX_ALERT_REFS)
+    packet_refs: Mapped[list] = mapped_column(JSON, default=list)  # capped (MAX_PACKET_REFS)
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)  # deterministic, evidence-derived
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)

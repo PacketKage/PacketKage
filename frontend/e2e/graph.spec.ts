@@ -107,3 +107,73 @@ test('large graph switches to scale tier and stays interactive', async ({ page }
   console.log(`[perf] leaf-override re-layout (75 new nodes): ${Date.now() - t1}ms`)
   expect(countAfter).toBeGreaterThan(countBefore)
 })
+
+test('evidence graph v2: provenance, attack path, blast radius, evidence chain', async ({ page }) => {
+  await ensureAnalyzed(page, 'c2_beacon.pcap')
+  await page.goto('/graph')
+
+  await page.getByLabel('Select capture').selectOption({ label: 'c2_beacon.pcap' })
+
+  // mode toolbar present with all five investigation modes
+  await expect(page.getByRole('tab', { name: 'Investigate' })).toBeVisible({ timeout: 30_000 })
+  for (const label of ['Attack Path', 'Blast Radius', 'Timeline', 'Evidence']) {
+    await expect(page.getByRole('tab', { name: label })).toBeVisible()
+  }
+
+  // --- Attack Path: find the observed flow path between beacon hosts ---
+  await page.getByRole('tab', { name: 'Attack Path' }).click()
+  await page.getByLabel('Source host').selectOption({ label: '192.168.1.42' })
+  await page.getByLabel('Target host').selectOption({ label: '185.234.72.19' })
+  await page.getByText('Find paths').click()
+  await expect(page.getByText('path 1')).toBeVisible({ timeout: 15_000 })
+  // the path is labeled as an inference over observed hops
+  await expect(page.getByText('inferred', { exact: true }).first()).toBeVisible()
+
+  // --- Blast Radius: bounded reachability from the workstation ---
+  await page.getByRole('tab', { name: 'Blast Radius' }).click()
+  await page.getByLabel('Blast radius start host').selectOption({ label: '192.168.1.42' })
+  await page.getByText('Compute blast radius').click()
+  await expect(page.getByText('Reachable nodes')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Alert-flagged')).toBeVisible()
+
+  // --- Evidence: the 5-step evidence chain with real deep links ---
+  await page.getByRole('tab', { name: 'Evidence' }).click()
+  await expect(page.getByText('Conclusion').first()).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('Flows / Observations').first()).toBeVisible()
+  await expect(page.getByText('PCAP reference').first()).toBeVisible()
+
+  // --- Timeline mode: event stream renders ---
+  await page.getByRole('tab', { name: 'Timeline' }).click()
+  await expect(page.getByText(/Chronological event stream/)).toBeVisible({ timeout: 15_000 })
+
+  // --- API-level v2 guarantees (bounded, provenance-carrying) ---
+  const capResp = await page.request.get('http://localhost:8000/api/captures?limit=500')
+  const captures = await capResp.json()
+  const cap = captures.find((c: { filename: string }) => c.filename === 'c2_beacon.pcap')
+  const v2 = await (
+    await page.request.get(`http://localhost:8000/api/graph/v2?capture_id=${cap.id}`)
+  ).json()
+  expect(v2.nodes.length).toBeGreaterThan(0)
+  expect(v2.truncated).toBe(false)
+  // provenance classes present; every edge carries timestamps + evidence ids
+  expect(v2.stats.provenance_classes).toContain('correlated')
+  for (const edge of v2.edges.slice(0, 10)) {
+    expect(edge.first_seen).toBeLessThanOrEqual(edge.last_seen)
+    expect(Array.isArray(edge.flow_ids)).toBe(true)
+    expect(Array.isArray(edge.alert_ids)).toBe(true)
+  }
+  // suspicious edges carry deterministic explanations from real alerts
+  const suspicious = v2.edges.filter((e: { alert_ids: string[] }) => e.alert_ids.length > 0)
+  expect(suspicious.length).toBeGreaterThan(0)
+  expect(suspicious[0].explanation).toContain('alert')
+
+  // edge detail endpoint joins the evidence chain end-to-end
+  const detail = await (
+    await page.request.get(
+      `http://localhost:8000/api/graph/v2/edge/${suspicious[0].id}?capture_id=${cap.id}`,
+    )
+  ).json()
+  expect(detail.flows.length).toBeGreaterThan(0)
+  expect(detail.alerts.length).toBeGreaterThan(0)
+  expect(detail.alerts[0].mitre.technique_id).toBeTruthy()
+})
