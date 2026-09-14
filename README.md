@@ -8,7 +8,7 @@
 
 **Network traffic analysis and investigation, built around understanding what happened.**
 
-PacketKage turns raw network traffic into a clear picture of network activity. Instead of forcing you to work through thousands of packets to understand an incident, it reconstructs the traffic into flows, hosts, protocols, behaviors, events, and alerts — while keeping the underlying packets available as evidence.
+PacketKage turns raw network traffic into a clear picture of network activity. Instead of forcing you to work through thousands of packets to understand an incident, it reconstructs the traffic into flows, hosts, protocols, behaviors, events, and alerts  while keeping the underlying packets available as evidence.
 
 > Here is what happened. Let me show you the network evidence behind it.
 
@@ -66,7 +66,7 @@ Current detections include:
 
 Each alert provides a score, severity, explanation, detection reasons, supporting evidence, and related flows.
 
-Related alerts are also correlated into **incidents** — per-host groups of alerts that belong to one campaign — with a plain-English story of what happened.
+Related alerts are also correlated into **incidents**  per-host groups of alerts that belong to one campaign  with a plain-English story of what happened.
 
 ### Timeline, Graph & Replay
 
@@ -81,32 +81,35 @@ It also provides:
 
 ### Evidence Graph 2.0
 
+
+![Graph overview](assets/graph.png)
+
 The Graph page is built on a materialized, provenance-carrying relationship graph (versioned API `/api/graph/v2`, alongside the legacy graph). Every edge carries a provenance class:
 
-* **observed** — directly seen in packet-derived artifacts (flows, DNS, TLS, HTTP)
-* **correlated** — derived by deterministic correlation (incidents → alerts)
-* **enriched** — static enrichment, clearly labeled as such (MITRE technique mapping)
+* **observed** : directly seen in packet-derived artifacts (flows, DNS, TLS, HTTP)
+* **correlated** : derived by deterministic correlation (incidents → alerts)
+* **enriched** : static enrichment, clearly labeled as such (MITRE technique mapping)
 
-Nodes are stable IDs (`host:{ip}`, `domain:{name}`, `service:{ip}:{port}`, `alert:{id}`, `incident:{source_ip}`, `case:{id}`) hydrated from existing tables at query time — no data duplication. Nothing here invents evidence: if an edge has no alert evidence, its explanation is empty; if a technique has no matching rule, it is not shown.
+Nodes are stable IDs (`host:{ip}`, `domain:{name}`, `service:{ip}:{port}`, `alert:{id}`, `incident:{source_ip}`, `case:{id}`) hydrated from existing tables at query time  no data duplication. Nothing here invents evidence: if an edge has no alert evidence, its explanation is empty; if a technique has no matching rule, it is not shown.
 
 Investigation modes:
 
-* **Investigate** — interactive evidence graph with node and edge drill-down panels
-* **Attack Path** — bounded path extraction between two entities (every hop is an observed/correlated edge; the assembled path is an inference, labeled as such)
-* **Blast Radius** — reachability analysis from a host, computed only from observed relationships
-* **Timeline** — chronological view of the graph events
-* **Evidence Chain** — walks Conclusion → Detection → Evidence → Flows → PCAP reference for every displayed claim
+* **Investigate**  interactive evidence graph with node and edge drill-down panels
+* **Attack Path**  bounded path extraction between two entities (every hop is an observed/correlated edge; the assembled path is an inference, labeled as such)
+* **Blast Radius**  reachability analysis from a host, computed only from observed relationships
+* **Timeline**  chronological view of the graph events
+* **Evidence Chain**  walks Conclusion → Detection → Evidence → Flows → PCAP reference for every displayed claim
 
-Suspicious edges explain themselves by aggregating the real alerts that touch a pair — scores and explanations are deterministic, not invented.
+Suspicious edges explain themselves by aggregating the real alerts that touch a pair  scores and explanations are deterministic, not invented.
 
 ### Cases & Investigation Workflow
 
-* Group related captures into a **case** — one incident, one story
+* Group related captures into a **case**  one incident, one story
 * Merged chronological timeline across every capture in the case
 * Case-level statistics: total packets, alerts, correlated incidents
 * One-click **HTML investigation report** (printable to PDF) with alerts, reasons, evidence, incidents, and timeline highlights
 * Alert triage: tag as `confirmed`, `false-positive`, or `escalated`, add analyst notes, and filter out triaged alerts
-* Alert → flow deep links that jump straight to the packet evidence
+* Alert flow deep links that jump straight to the packet evidence
 
 ### Network Engineering
 
@@ -128,7 +131,7 @@ PacketKage is not limited to security investigations. It also provides network h
 docker compose up
 ```
 
-Then open [http://localhost:8000](http://localhost:8000) — the full app (frontend + API) runs in a single container, with analysis data persisted in a named volume.
+Then open [http://localhost:8000](http://localhost:8000) the full app (frontend + API) runs in a single container, with analysis data persisted in a named volume.
 
 ### Requirements (manual setup)
 
@@ -285,7 +288,7 @@ PacketKage/
 
 The project is covered by three test layers, all wired into GitHub Actions CI:
 
-**Backend** — 157 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
+**Backend**  157 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
 
 ```bash
 cd backend
@@ -300,7 +303,7 @@ cd frontend
 npm test
 ```
 
-**End-to-end smoke** (Playwright) — boots both servers and drives the real UI: upload → analyze → alerts. Self-contained:
+**End-to-end smoke** (Playwright)  boots both servers and drives the real UI: upload → analyze → alerts. Self-contained:
 
 ```bash
 cd frontend
@@ -311,13 +314,13 @@ PacketKage also uses deterministic synthetic PCAPs to make analysis scenarios re
 
 ## Live Capture
 
-PacketKage can also record traffic directly from a network interface — no upload needed. On the **Capture** page:
+PacketKage can also record traffic directly from a network interface  no upload needed. On the **Capture** page:
 
 1. Pick a network interface (and optionally a BPF filter, e.g. `tcp port 80`)
-2. Press **Start live capture** — a live packet counter and auto-stop countdown appear
+2. Press **Start live capture**  a live packet counter and auto-stop countdown appear
 3. Press **Stop & analyze** (or let the auto-stop timer fire)
 
-The recorded traffic is saved as a PCAP and flows through the exact same analysis pipeline as an upload — flows, hosts, alerts, timeline, everything.
+The recorded traffic is saved as a PCAP and flows through the exact same analysis pipeline as an upload  flows, hosts, alerts, timeline, everything.
 
 > Note: live sniffing needs elevated permissions. Run the backend as root, or grant the Python process `CAP_NET_RAW`/`CAP_NET_ADMIN` capabilities. Interface listing and all other features work unprivileged.
 
