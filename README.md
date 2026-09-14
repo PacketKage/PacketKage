@@ -140,7 +140,7 @@ Then open [http://localhost:8000](http://localhost:8000) — the full app (front
 
 ```bash
 
-cd ~/Projects/PacketKage/backend
+cd PacketKage/backend
 
 source .venv/bin/activate
 
@@ -162,7 +162,7 @@ Open another terminal:
 
 ```bash
 
-cd ~/Projects/PacketKage/frontend
+cd PacketKage/frontend
 
 npm run dev
 ```
