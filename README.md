@@ -303,7 +303,13 @@ cd frontend
 npm test
 ```
 
-**End-to-end smoke** (Playwright)  boots both servers and drives the real UI: upload → analyze → alerts. Self-contained:
+**End-to-end** (Playwright) — boots both servers and drives the real UI:
+
+* **Smoke**: upload → analyze → alerts — the whole product in one path
+* **Graph**: edge-type filter toggles, scale tiers, and the evidence graph v2 (provenance, attack path, blast radius, evidence chain)
+* **Export**: CSV export of flows, and the empty-filter toast case
+
+Self-contained:
 
 ```bash
 cd frontend
