@@ -79,6 +79,26 @@ It also provides:
 * Incident replay
 * Flow and packet drill-down
 
+### Evidence Graph 2.0
+
+The Graph page is built on a materialized, provenance-carrying relationship graph (versioned API `/api/graph/v2`, alongside the legacy graph). Every edge carries a provenance class:
+
+* **observed** — directly seen in packet-derived artifacts (flows, DNS, TLS, HTTP)
+* **correlated** — derived by deterministic correlation (incidents → alerts)
+* **enriched** — static enrichment, clearly labeled as such (MITRE technique mapping)
+
+Nodes are stable IDs (`host:{ip}`, `domain:{name}`, `service:{ip}:{port}`, `alert:{id}`, `incident:{source_ip}`, `case:{id}`) hydrated from existing tables at query time — no data duplication. Nothing here invents evidence: if an edge has no alert evidence, its explanation is empty; if a technique has no matching rule, it is not shown.
+
+Investigation modes:
+
+* **Investigate** — interactive evidence graph with node and edge drill-down panels
+* **Attack Path** — bounded path extraction between two entities (every hop is an observed/correlated edge; the assembled path is an inference, labeled as such)
+* **Blast Radius** — reachability analysis from a host, computed only from observed relationships
+* **Timeline** — chronological view of the graph events
+* **Evidence Chain** — walks Conclusion → Detection → Evidence → Flows → PCAP reference for every displayed claim
+
+Suspicious edges explain themselves by aggregating the real alerts that touch a pair — scores and explanations are deterministic, not invented.
+
 ### Cases & Investigation Workflow
 
 * Group related captures into a **case** — one incident, one story
@@ -265,7 +285,7 @@ PacketKage/
 
 The project is covered by three test layers, all wired into GitHub Actions CI:
 
-**Backend** — 113 integration tests (pytest) over the full analysis pipeline:
+**Backend** — 157 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
 
 ```bash
 cd backend
