@@ -322,7 +322,7 @@ class GraphV2Node(BaseModel):
     score: int | None = None
     reasons: list[dict[str, Any]] = Field(default_factory=list)
     explanation: str | None = None
-    mitre: dict[str, str] | None = None
+    mitre: dict[str, str | None] | None = None
     status: str | None = None
     filename: str | None = None
     packet_count: int | None = None

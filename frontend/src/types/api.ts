@@ -391,6 +391,19 @@ export interface Graph {
 export type GraphNodeKind = 'host' | 'domain' | 'service' | 'alert' | 'incident' | 'case' | 'capture'
 export type GraphProvenance = 'observed' | 'correlated' | 'enriched'
 
+/**
+ * ATT&CK-style classification attached to alert-backed graph items.
+ * `source: 'mitre'` — defensible official ATT&CK mapping (T-prefixed ID).
+ * `source: 'packetkage'` — internal classification; no official technique ID
+ * (technique_id is null and must never be rendered as an ATT&CK ID).
+ */
+export interface MappedClassification {
+  source: 'mitre' | 'packetkage'
+  technique_id?: string | null
+  technique: string
+  tactic: string
+}
+
 export interface GraphV2Node {
   id: string
   kind: GraphNodeKind
@@ -410,7 +423,7 @@ export interface GraphV2Node {
   score?: number | null
   reasons?: { reason: string; detail: string; weight: number }[]
   explanation?: string | null
-  mitre?: { technique_id: string; technique: string; tactic: string } | null
+  mitre?: MappedClassification | null
   status?: string | null
   filename?: string | null
   packet_count?: number | null
@@ -439,7 +452,7 @@ export interface GraphV2EdgeEvidenceAlert {
   explanation: string | null
   destination_port: number | null
   timestamp: number | null
-  mitre?: { technique_id: string; technique: string; tactic: string } | null
+  mitre?: MappedClassification | null
 }
 
 export interface GraphV2Edge {

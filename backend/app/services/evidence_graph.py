@@ -107,79 +107,101 @@ class GraphCaps:
 
 
 # ---- MITRE enrichment (static, curated, labeled as enrichment) --------------
-# Maps the 14 existing deterministic rules to ATT&CK technique IDs. This is
+# Maps the 14 existing deterministic rules to ATT&CK context. This is
 # enrichment of REAL detections — shown as chips on alert-backed items only.
+#
+# Every entry declares its source:
+#   "mitre"      — defensible official ATT&CK technique/sub-technique mapping;
+#                 technique_id matches ^T\d{4}(\.\d{3})?$
+#   "packetkage" — PacketKage internal classification: the captured evidence
+#                 does not establish a specific official ATT&CK technique, so
+#                 no technique_id is emitted. Internal identifiers (e.g.
+#                 "C1091") must never be rendered as ATT&CK IDs.
 
-RULE_MITRE: dict[str, dict[str, str]] = {
+RULE_MITRE: dict[str, dict[str, str | None]] = {
     "port_scan": {
         "technique_id": "T1046",
         "technique": "Network Service Discovery",
         "tactic": "Discovery",
+        "source": "mitre",
     },
     "beaconing": {
-        "technique_id": "C1091",  # internal convention for behavior-based C2 (no ATT&CK number for periodicity itself)
+        "technique_id": None,  # no official ATT&CK number for periodicity itself
         "technique": "Scheduled Beaconing",
         "tactic": "Command and Control",
+        "source": "packetkage",
     },
     "dns_tunneling": {
         "technique_id": "T1071.004",
         "technique": "Application Layer Protocol: DNS",
         "tactic": "Command and Control",
+        "source": "mitre",
     },
     "nxdomain_burst": {
-        "technique_id": "T1071.004",
-        "technique": "Application Layer Protocol: DNS",
+        "technique_id": None,  # NXDOMAIN burst does not establish DNS-as-C2-channel
+        "technique": "NXDOMAIN Burst",
         "tactic": "Command and Control",
+        "source": "packetkage",
     },
     "suspicious_port": {
         "technique_id": "T1571",
         "technique": "Non-Standard Port",
         "tactic": "Command and Control",
+        "source": "mitre",
     },
     "excessive_failures": {
-        "technique_id": "T1046",
-        "technique": "Network Service Discovery",
-        "tactic": "Discovery",
+        "technique_id": None,  # failed connections are not network service discovery
+        "technique": "Excessive Connection Failures",
+        "tactic": "Command and Control",
+        "source": "packetkage",
     },
     "connection_without_dns": {
-        "technique_id": "T1573",
-        "technique": "Encrypted Channel",
+        "technique_id": None,  # direct-IP connection does not establish an encrypted channel
+        "technique": "Direct-IP Connection",
         "tactic": "Command and Control",
+        "source": "packetkage",
     },
     "high_outbound_volume": {
-        "technique_id": "T1048",
-        "technique": "Exfiltration Over Alternative Protocol",
+        "technique_id": None,  # volume alone does not establish an exfiltration mechanism
+        "technique": "High Outbound Volume",
         "tactic": "Exfiltration",
+        "source": "packetkage",
     },
     "arp_spoofing": {
-        "technique_id": "T1557",
-        "technique": "Adversary-in-the-Middle",
+        "technique_id": "T1557.002",
+        "technique": "Adversary-in-the-Middle: ARP Cache Poisoning",
         "tactic": "Collection",
+        "source": "mitre",
     },
     "lateral_movement": {
         "technique_id": "T1021",
         "technique": "Remote Services",
         "tactic": "Lateral Movement",
+        "source": "mitre",
     },
     "dga_domains": {
         "technique_id": "T1568.002",
         "technique": "Domain Generation Algorithms",
         "tactic": "Command and Control",
+        "source": "mitre",
     },
     "data_exfiltration": {
         "technique_id": "T1048",
         "technique": "Exfiltration Over Alternative Protocol",
         "tactic": "Exfiltration",
+        "source": "mitre",
     },
     "low_slow_beaconing": {
-        "technique_id": "C1091",
-        "technique": "Scheduled Beaconing",
+        "technique_id": None,  # no official ATT&CK number for periodicity itself
+        "technique": "Low-and-Slow Beaconing",
         "tactic": "Command and Control",
+        "source": "packetkage",
     },
     "suspicious_user_agent": {
-        "technique_id": "T1043",
-        "technique": "Protocol Tunneling",
+        "technique_id": None,  # retired T1043 was never a defensible mapping for a suspicious UA
+        "technique": "Suspicious User Agent",
         "tactic": "Command and Control",
+        "source": "packetkage",
     },
 }
 
@@ -614,6 +636,7 @@ def hydrate_node(
                     "technique_id": mitre["technique_id"],
                     "technique": mitre["technique"],
                     "tactic": mitre["tactic"],
+                    "source": mitre["source"],
                 }
                 if mitre
                 else None

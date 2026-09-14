@@ -175,5 +175,14 @@ test('evidence graph v2: provenance, attack path, blast radius, evidence chain',
   ).json()
   expect(detail.flows.length).toBeGreaterThan(0)
   expect(detail.alerts.length).toBeGreaterThan(0)
-  expect(detail.alerts[0].mitre.technique_id).toBeTruthy()
+  // mitre enrichment is source-labeled: official ATT&CK mappings carry
+  // T-patterned IDs; internal classifications carry none
+  const mitre = detail.alerts[0].mitre
+  expect(mitre).toBeTruthy()
+  expect(['mitre', 'packetkage']).toContain(mitre.source)
+  if (mitre.source === 'mitre') {
+    expect(mitre.technique_id).toMatch(/^T\d{4}(\.\d{3})?$/)
+  } else {
+    expect(mitre.technique_id).toBeNull()
+  }
 })

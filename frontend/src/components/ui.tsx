@@ -92,14 +92,16 @@ export function Badge({
   tone = 'neutral',
   children,
   className = '',
+  ...rest
 }: {
   tone?: BadgeTone
   children: ReactNode
   className?: string
-}) {
+} & React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${BADGE_TONES[tone]} ${className}`}
+      {...rest}
     >
       {children}
     </span>

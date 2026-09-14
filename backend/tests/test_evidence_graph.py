@@ -9,6 +9,7 @@ of the untouched v1 graph.
 """
 from __future__ import annotations
 
+import re
 import time
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -92,10 +93,14 @@ def test_v2_alert_edges_and_mitre(client):
     assert det["alerts"], "edge detail must join alert rows"
     a = det["alerts"][0]
     assert a["mitre"], f"rule {a['rule_name']} must have curated MITRE mapping"
-    assert a["mitre"]["technique_id"]
+    assert a["mitre"]["source"] in ("mitre", "packetkage")
     assert a["mitre"]["tactic"]
+    if a["mitre"]["source"] == "mitre":
+        # official ATT&CK IDs only: T-prefixed technique/sub-technique
+        assert re.fullmatch(r"T\d{4}(\.\d{3})?", a["mitre"]["technique_id"])
 
-    # the beaconing rule specifically carries the C2 mapping
+    # the beaconing rule specifically carries the internal C2 classification
+    # (no official ATT&CK number for periodicity itself — never C1091)
     all_alerts = []
     for e in alert_edges:
         d = client.get(f"/api/graph/v2/edge/{e['id']}?capture_id={capture_id}").json()
@@ -103,11 +108,14 @@ def test_v2_alert_edges_and_mitre(client):
     rules = {x["rule_name"] for x in all_alerts}
     assert "beaconing" in rules
     beacon = next(x for x in all_alerts if x["rule_name"] == "beaconing")
-    assert beacon["mitre"]["technique_id"] == "C1091"
+    assert beacon["mitre"]["source"] == "packetkage"
+    assert beacon["mitre"]["technique_id"] is None
     assert beacon["mitre"]["tactic"] == "Command and Control"
     # every joined alert carries its rule's curated MITRE map entry (or none)
     for x in all_alerts:
-        assert x["mitre"] is None or x["mitre"]["technique_id"]
+        assert x["mitre"] is None or x["mitre"]["source"] in ("mitre", "packetkage")
+        if x["mitre"] and x["mitre"]["source"] == "mitre":
+            assert re.fullmatch(r"T\d{4}(\.\d{3})?", x["mitre"]["technique_id"])
 
 
 def test_v2_suspicious_edge_explanation_from_real_alerts_only(client):
@@ -464,3 +472,92 @@ def test_v2_empty_capture_states(client):
         "&source=host:192.168.1.42&target=host:192.168.1.1"
     ).json()
     assert isinstance(p["paths"], list)
+
+
+# ---------------- MITRE mapping integrity ----------------
+
+ALL_RULES = {
+    "port_scan",
+    "beaconing",
+    "dns_tunneling",
+    "nxdomain_burst",
+    "suspicious_port",
+    "excessive_failures",
+    "connection_without_dns",
+    "high_outbound_volume",
+    "arp_spoofing",
+    "lateral_movement",
+    "dga_domains",
+    "data_exfiltration",
+    "low_slow_beaconing",
+    "suspicious_user_agent",
+}
+
+
+def test_rule_mitre_mapping_integrity():
+    """The 14-rule mapping table is structurally honest.
+
+    Regression guard: after the C1091 fix, no PacketKage-internal identifier
+    can ever be emitted as an official ATT&CK technique ID.
+    """
+    from app.services.evidence_graph import RULE_MITRE
+
+    # the existing 14-rule mapping behavior is preserved
+    assert set(RULE_MITRE) == ALL_RULES
+
+    official_id = re.compile(r"T\d{4}(\.\d{3})?")
+
+    for rule, entry in RULE_MITRE.items():
+        assert entry["source"] in ("mitre", "packetkage"), rule
+        assert entry["technique"], rule
+        assert entry["tactic"], rule
+
+        if entry["source"] == "mitre":
+            # official mappings carry real ATT&CK technique/sub-technique IDs
+            # (T-prefixed) — rejects C1091-style internal IDs and retired IDs
+            assert entry["technique_id"], f"{rule}: mitre source requires technique_id"
+            assert official_id.fullmatch(entry["technique_id"]), (
+                f"{rule}: {entry['technique_id']!r} is not a valid ATT&CK ID"
+            )
+        else:
+            # internal classifications never carry a technique ID
+            assert entry["technique_id"] is None, (
+                f"{rule}: packetkage-source entry must not emit a technique_id"
+            )
+
+    # the specific historical regressions can never return
+    for rule in ("beaconing", "low_slow_beaconing", "suspicious_user_agent"):
+        assert RULE_MITRE[rule]["technique_id"] is None
+        assert RULE_MITRE[rule]["source"] == "packetkage"
+
+    # defensible official mappings survived the audit unchanged
+    assert RULE_MITRE["port_scan"]["technique_id"] == "T1046"
+    assert RULE_MITRE["dns_tunneling"]["technique_id"] == "T1071.004"
+    assert RULE_MITRE["arp_spoofing"]["technique_id"] == "T1557.002"
+    assert RULE_MITRE["lateral_movement"]["technique_id"] == "T1021"
+    assert RULE_MITRE["dga_domains"]["technique_id"] == "T1568.002"
+    assert RULE_MITRE["data_exfiltration"]["technique_id"] == "T1048"
+    assert RULE_MITRE["suspicious_port"]["technique_id"] == "T1571"
+
+
+def test_v2_alert_node_payload_never_emits_internal_ids_as_mitre(client):
+    """Alert-node hydration + edge detail payloads carry source-labeled mitre.
+
+    End-to-end over the API: whatever rule triggered, an official-looking
+    chip is only possible for T-patterned IDs with source == 'mitre'.
+    """
+    capture_id = _analyze(client, "c2_beacon.pcap")
+    g = client.get(f"/api/graph/v2?capture_id={capture_id}").json()
+
+    alert_nodes = [n for n in g["nodes"] if n["kind"] == "alert"]
+    assert alert_nodes, "c2 beacon must produce alert nodes"
+    official_id = re.compile(r"T\d{4}(\.\d{3})?")
+    for n in alert_nodes:
+        m = n.get("mitre")
+        if m is None:
+            continue
+        assert m["source"] in ("mitre", "packetkage")
+        if m["source"] == "mitre":
+            assert official_id.fullmatch(m["technique_id"]), m
+        else:
+            assert m["technique_id"] is None, m

@@ -17,6 +17,7 @@ import type {
   GraphV2Edge,
   GraphV2Node,
   GraphV2NodeDetail,
+  MappedClassification,
 } from '../types/api'
 import { Badge, formatBytes, formatTime } from '../components/ui'
 import { EvidenceTable } from '../components/EvidenceTable'
@@ -42,11 +43,33 @@ export function RelationshipChip({ relationship }: { relationship: string }) {
   return <Badge tone="neutral">{relationship.replaceAll('_', ' ').toLowerCase()}</Badge>
 }
 
-export function MitreChip({ mitre }: { mitre: { technique_id: string; technique: string; tactic: string } | null | undefined }) {
+/** Official ATT&CK technique/sub-technique pattern: T1046, T1557.002, … */
+const OFFICIAL_MITRE_ID = /^T\d{4}(\.\d{3})?$/
+
+export function MitreChip({ mitre }: { mitre: MappedClassification | null | undefined }) {
   if (!mitre) return null
+  // Official ATT&CK styling ONLY for mitre-source entries with a valid
+  // T-patterned ID — anything else (internal classification, or a stale/
+  // adversarial payload claiming an internal ID like C1091) renders as a
+  // PacketKage-internal chip and can never pass as an ATT&CK mapping.
+  const official =
+    mitre.source === 'mitre' && !!mitre.technique_id && OFFICIAL_MITRE_ID.test(mitre.technique_id)
+  if (official) {
+    return (
+      <Badge tone="warning" className="font-mono" title="MITRE ATT&CK technique">
+        {mitre.technique_id} · {mitre.technique}
+      </Badge>
+    )
+  }
+  // Internal chip always shows the classification NAME — a suspect/
+  // malformed technique_id is never displayed, even as a PK label
   return (
-    <Badge tone="warning" className="font-mono">
-      {mitre.technique_id} · {mitre.technique}
+    <Badge
+      tone="neutral"
+      className="font-mono"
+      title="PacketKage internal classification — not a MITRE ATT&CK technique"
+    >
+      PK · {mitre.technique}
     </Badge>
   )
 }

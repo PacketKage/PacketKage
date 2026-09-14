@@ -100,7 +100,7 @@ Investigation modes:
 * **Timeline**  chronological view of the graph events
 * **Evidence Chain**  walks Conclusion → Detection → Evidence → Flows → PCAP reference for every displayed claim
 
-Suspicious edges explain themselves by aggregating the real alerts that touch a pair  scores and explanations are deterministic, not invented.
+Suspicious edges explain themselves by aggregating the real alerts that touch a pair  scores and explanations are deterministic, not invented. Detections are enriched with either official MITRE ATT&CK technique mappings or clearly labeled PacketKage internal classifications; internal classifications never render as ATT&CK IDs.
 
 ### Cases & Investigation Workflow
 

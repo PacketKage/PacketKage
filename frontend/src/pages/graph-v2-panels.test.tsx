@@ -9,7 +9,7 @@ vi.mock('cytoscape', () => {
   return { default: cytoscapeMock }
 })
 
-import { EdgeProvenancePanel, EvidenceChainList, NodeDetailPanel } from './graph-v2-panels'
+import { EdgeProvenancePanel, EvidenceChainList, MitreChip, NodeDetailPanel } from './graph-v2-panels'
 import {
   evidenceGraphFixture,
   graphV2EdgeDetailFixture,
@@ -49,7 +49,9 @@ describe('EdgeProvenancePanel', () => {
     // joined alert with reasons + MITRE chip
     expect(screen.getAllByText('Regular intervals:').length).toBeGreaterThan(0)
     expect(screen.getByText(/jitter 4\.2%/)).toBeDefined()
-    expect(screen.getByText('C1091 · Scheduled Beaconing')).toBeDefined()
+    // internal classification renders as a PK chip — never as an ATT&CK ID
+    expect(screen.getByText('PK · Scheduled Beaconing')).toBeDefined()
+    expect(screen.queryByText(/C1091/)).toBeNull()
     // contributing flows with deep link (anchor href contains the flow route)
     const flowLink = document.querySelector<HTMLAnchorElement>(
       `a[href="/flows?capture_id=cap1&flow=flow1"]`,
@@ -136,5 +138,54 @@ describe('EvidenceChainList', () => {
       <EvidenceChainList graph={evidenceGraphFixture({ edges: [] })} captureId="cap1" />,
     )
     expect(screen.getByText(/No alert-backed relationships in this capture/)).toBeDefined()
+  })
+})
+
+describe('MitreChip — official vs internal classification rendering', () => {
+  it('renders official ATT&CK mappings as technique chips', () => {
+    render(
+      <MitreChip
+        mitre={{ source: 'mitre', technique_id: 'T1046', technique: 'Network Service Discovery', tactic: 'Discovery' }}
+      />,
+    )
+    expect(screen.getByText('T1046 · Network Service Discovery')).toBeDefined()
+  })
+
+  it('renders internal classifications as PK chips without any technique ID', () => {
+    render(
+      <MitreChip
+        mitre={{ source: 'packetkage', technique_id: null, technique: 'Scheduled Beaconing', tactic: 'Command and Control' }}
+      />,
+    )
+    expect(screen.getByText('PK · Scheduled Beaconing')).toBeDefined()
+    expect(screen.queryByText(/C1091/)).toBeNull()
+    expect(screen.queryByText(/T\d{4}/)).toBeNull()
+  })
+
+  it('never renders an internal-style ID (C1091) as a MITRE technique, even if the payload claims mitre source', () => {
+    render(
+      <MitreChip
+        mitre={{ source: 'mitre', technique_id: 'C1091', technique: 'Scheduled Beaconing', tactic: 'Command and Control' }}
+      />,
+    )
+    // adversarial/stale payload: must fall back to internal styling, never
+    // render "C1091 · ..." as an official ATT&CK mapping
+    expect(screen.queryByText('C1091 · Scheduled Beaconing')).toBeNull()
+    expect(screen.getByText('PK · Scheduled Beaconing')).toBeDefined()
+  })
+
+  it('renders a malformed technique ID claimed as official as internal, not ATT&CK', () => {
+    render(
+      <MitreChip
+        mitre={{ source: 'mitre', technique_id: 'T10', technique: 'Bogus Technique', tactic: 'Discovery' }}
+      />,
+    )
+    expect(screen.queryByText('T10 · Bogus Technique')).toBeNull()
+    expect(screen.getByText('PK · Bogus Technique')).toBeDefined()
+  })
+
+  it('renders nothing when there is no mapping', () => {
+    const { container } = render(<MitreChip mitre={null} />)
+    expect(container.querySelector('span')).toBeNull()
   })
 })
