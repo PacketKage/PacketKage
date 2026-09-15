@@ -474,6 +474,39 @@ def test_v2_empty_capture_states(client):
     assert isinstance(p["paths"], list)
 
 
+def test_v2_case_capture_includes_edge_does_not_crash(client, app_env):
+    """A capture that belongs to a case must not crash the graph build.
+
+    Regression: the builder's local variable `capture_id` shadowed the module
+    helper `capture_id()`, so building the INCLUDES edge raised
+    TypeError ('str' object is not callable) for any captured-in-a-case graph.
+    """
+    capture_id = _analyze(client, "dhcp_lease.pcap")
+
+    # force the graph to be unmaterialized so the next /api/graph/v2 request
+    # runs the builder again — this time with a case that includes the capture
+    from sqlalchemy import delete
+
+    from app.core.database import SessionLocal
+    from app.db.orm import GraphEdgeModel
+
+    with SessionLocal() as db:
+        db.execute(delete(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id))
+        db.commit()
+
+    case = client.post("/api/cases", json={"name": "Case A"}).json()
+    r = client.post(f"/api/cases/{case['id']}/captures", json={"capture_id": capture_id})
+    assert r.status_code == 200, r.text
+
+    g = client.get(f"/api/graph/v2?capture_id={capture_id}").json()
+    includes = [e for e in g["edges"] if e["relationship"] == "INCLUDES"]
+    assert includes, "case → capture INCLUDES edge must be emitted"
+    edge = includes[0]
+    assert edge["source"] == f"case:{case['id']}"
+    assert edge["target"] == f"capture:{capture_id}"
+    assert edge["provenance"] == "observed"
+
+
 # ---------------- MITRE mapping integrity ----------------
 
 ALL_RULES = {
@@ -482,12 +515,12 @@ ALL_RULES = {
     "dns_tunneling",
     "nxdomain_burst",
     "suspicious_port",
-    "excessive_failures",
+    "excessive_connection_failures",
     "connection_without_dns",
     "high_outbound_volume",
     "arp_spoofing",
     "lateral_movement",
-    "dga_domains",
+    "dga_domain",
     "data_exfiltration",
     "low_slow_beaconing",
     "suspicious_user_agent",
@@ -535,9 +568,22 @@ def test_rule_mitre_mapping_integrity():
     assert RULE_MITRE["dns_tunneling"]["technique_id"] == "T1071.004"
     assert RULE_MITRE["arp_spoofing"]["technique_id"] == "T1557.002"
     assert RULE_MITRE["lateral_movement"]["technique_id"] == "T1021"
-    assert RULE_MITRE["dga_domains"]["technique_id"] == "T1568.002"
+    assert RULE_MITRE["dga_domain"]["technique_id"] == "T1568.002"
     assert RULE_MITRE["data_exfiltration"]["technique_id"] == "T1048"
     assert RULE_MITRE["suspicious_port"]["technique_id"] == "T1571"
+
+    # every mapping key must match a rule_name the engine actually emits — a
+    # stale key (e.g. 'dga_domains' vs emitted 'dga_domain') silently drops
+    # the MITRE enrichment from every alert of that rule
+    import inspect
+
+    from app.services import suspicion_engine
+
+    engine_source = inspect.getsource(suspicion_engine)
+    for rule in RULE_MITRE:
+        assert f'rule_name="{rule}"' in engine_source, (
+            f"RULE_MITRE key {rule!r} matches no rule_name the engine emits"
+        )
 
 
 def test_v2_alert_node_payload_never_emits_internal_ids_as_mitre(client):

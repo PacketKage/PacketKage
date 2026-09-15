@@ -1,8 +1,5 @@
-"""Analysis pipeline (Step 1: parse → normalize → persist summary).
+"""Analysis pipeline: parse → normalize → detect → score → persist results."""
 
-Future steps will extend this into:
-  parse → flows → protocol extraction → host profiling → behavior → suspicion.
-"""
 from __future__ import annotations
 
 from collections import Counter

@@ -45,6 +45,7 @@ export function CasesPage() {
     mutationFn: (captureId: string) => api.addCaptureToCase(selectedCaseId!, captureId),
     onSuccess: (_detail, captureId) => {
       invalidate()
+      queryClient.invalidateQueries({ queryKey: ['cases'] })
       mutateSuccess('Capture added to case', `case-add-${captureId}`)
     },
     onError: (err, captureId) =>
@@ -55,6 +56,7 @@ export function CasesPage() {
     mutationFn: (captureId: string) => api.removeCaptureFromCase(selectedCaseId!, captureId),
     onSuccess: (_detail, captureId) => {
       invalidate()
+      queryClient.invalidateQueries({ queryKey: ['cases'] })
       mutateSuccess('Capture removed from case', `case-remove-${captureId}`)
     },
     onError: (err, captureId) =>

@@ -310,9 +310,9 @@ PacketKage/
 
 ## Testing
 
-The project is covered by three test layers, all wired into GitHub Actions CI:
+The project is covered by three test layers — backend pytest, frontend vitest, and end-to-end Playwright (the first two run in GitHub Actions CI, E2E runs locally):
 
-**Backend**  157 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
+**Backend**  169 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
 
 ```bash
 cd backend
@@ -332,6 +332,7 @@ npm test
 * **Smoke**: upload → analyze → alerts - the whole product in one path
 * **Graph**: edge-type filter toggles, scale tiers, and the evidence graph v2 (provenance, attack path, blast radius, evidence chain)
 * **Export**: CSV export of flows, and the empty-filter toast case
+* **Delete**: upload → delete via confirmation modal → gone from list, including after analysis
 
 Self-contained:
 

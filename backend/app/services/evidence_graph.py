@@ -149,7 +149,7 @@ RULE_MITRE: dict[str, dict[str, str | None]] = {
         "tactic": "Command and Control",
         "source": "mitre",
     },
-    "excessive_failures": {
+    "excessive_connection_failures": {
         "technique_id": None,  # failed connections are not network service discovery
         "technique": "Excessive Connection Failures",
         "tactic": "Command and Control",
@@ -179,7 +179,7 @@ RULE_MITRE: dict[str, dict[str, str | None]] = {
         "tactic": "Lateral Movement",
         "source": "mitre",
     },
-    "dga_domains": {
+    "dga_domain": {
         "technique_id": "T1568.002",
         "technique": "Domain Generation Algorithms",
         "tactic": "Command and Control",
@@ -300,7 +300,7 @@ class EvidenceGraphBuilder:
     # -- main build --
 
     def build(self, capture: CaptureModel) -> list[GraphEdgeModel]:
-        capture_id = capture.id
+        cap_id = capture.id
         edges: dict[tuple[str, str, str], _EdgeAcc] = {}
 
         def acc(src: str, dst: str, rel: str, provenance: str = "observed") -> _EdgeAcc:
@@ -311,35 +311,35 @@ class EvidenceGraphBuilder:
 
         flows = list(
             self.db.scalars(
-                select(FlowModel).where(FlowModel.capture_id == capture_id)
+                select(FlowModel).where(FlowModel.capture_id == cap_id)
             )
         )
         dns_txns = list(
             self.db.scalars(
-                select(DNSTransactionModel).where(DNSTransactionModel.capture_id == capture_id)
+                select(DNSTransactionModel).where(DNSTransactionModel.capture_id == cap_id)
             )
         )
         tls_sessions = list(
             self.db.scalars(
-                select(TLSSessionModel).where(TLSSessionModel.capture_id == capture_id)
+                select(TLSSessionModel).where(TLSSessionModel.capture_id == cap_id)
             )
         )
         http_txns = list(
             self.db.scalars(
-                select(HTTPTransactionModel).where(HTTPTransactionModel.capture_id == capture_id)
+                select(HTTPTransactionModel).where(HTTPTransactionModel.capture_id == cap_id)
             )
         )
         hosts = list(
-            self.db.scalars(select(HostModel).where(HostModel.capture_id == capture_id))
+            self.db.scalars(select(HostModel).where(HostModel.capture_id == cap_id))
         )
         alerts = list(
             self.db.scalars(
                 select(AlertModel)
-                .where(AlertModel.capture_id == capture_id)
+                .where(AlertModel.capture_id == cap_id)
                 .order_by(AlertModel.score.desc())
             )
         )
-        alert_by_pair = self._alert_context(capture_id)
+        alert_by_pair = self._alert_context(cap_id)
 
         # 1) FLOW edges (host → host): directly observed, flow+packet provenance
         for f in flows:
@@ -428,11 +428,13 @@ class EvidenceGraphBuilder:
             # attribute alert evidence onto the FLOW edge it describes
             pair = (a.source_ip, a.destination_ip)
             flow_edge = edges.get((host_id(a.source_ip), host_id(a.destination_ip), "FLOW"))
-            if flow_edge is not None and a.id not in flow_edge.alert_ids:
+            if flow_edge is None:
+                continue
+            if a.id not in flow_edge.alert_ids:
                 flow_edge.alert_ids.append(a.id)
             for other in alert_by_pair.get(pair, []):
                 if other.id not in flow_edge.alert_ids and other.id != a.id:
-                    flow_edge.alert_ids.append(other.id) if flow_edge is not None else None
+                    flow_edge.alert_ids.append(other.id)
 
         # 7) Incident edges (from capture.summary — correlated by suspicion engine)
         summary = capture.summary or {}
@@ -440,7 +442,7 @@ class EvidenceGraphBuilder:
             src_ip = incident.get("source_ip")
             if not src_ip:
                 continue
-            # case-insensitive synthetic id: incidents are per-capture per-source
+            # synthetic id namespaced by source IP: an incident node per source
             e = acc(incident_id(src_ip), host_id(src_ip), "GROUPS", provenance="correlated")
             e.observe(incident.get("first_seen") or 0.0, alert_id=None)
             e.count = max(e.count, int(incident.get("alert_count") or 0))
@@ -457,8 +459,8 @@ class EvidenceGraphBuilder:
             self.db.scalars(select(CaseModel).order_by(CaseModel.created_at.desc()).limit(500))
         )
         for c in case_rows:
-            if capture_id in (c.capture_ids or []):
-                e = acc(case_id(c.id), capture_id(capture_id), "INCLUDES", provenance="observed")
+            if cap_id in (c.capture_ids or []):
+                e = acc(case_id(c.id), capture_id(cap_id), "INCLUDES", provenance="observed")
                 created = c.created_at.timestamp() if c.created_at else 0.0
                 e.observe(created)
 
@@ -481,8 +483,8 @@ class EvidenceGraphBuilder:
         for (src, dst, rel), e in edges.items():
             rows.append(
                 GraphEdgeModel(
-                    id=f"{capture_id}:{src}->{dst}:{rel}",
-                    capture_id=capture_id,
+                    id=f"{cap_id}:{src}->{dst}:{rel}",
+                    capture_id=cap_id,
                     source_id=src,
                     target_id=dst,
                     relationship=rel,

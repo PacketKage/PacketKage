@@ -37,7 +37,7 @@ jobs:
       - name: Mypy (type check)
         run: mypy app/
 
-      - name: Pytest (113 tests)
+      - name: Pytest
         run: python -m pytest tests/ -q
 
   frontend:

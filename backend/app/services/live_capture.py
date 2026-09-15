@@ -280,7 +280,7 @@ class LiveCaptureManager:
         except Exception as exc:
             raise LiveCaptureError(f"Failed to write capture file: {exc}") from exc
 
-        db: SessionLocal = SessionLocal()
+        db = SessionLocal()
         try:
             repo = CaptureRepository(db)
             capture = repo.create(

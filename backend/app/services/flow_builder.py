@@ -14,10 +14,7 @@ from app.core.models import NormalizedPacket
 
 PRIVATE_V4_PREFIXES = ("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
                        "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-                       "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")
-
-# IPv6: unique-local (fc00::/7 → fc/fd prefix), link-local (fe80::/10), loopback
-PRIVATE_V6_PREFIXES = ("fc", "fd", "fe80", "fe9", "fea", "feb")
+                        "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")
 
 
 def _is_private_v6(ip: str) -> bool:

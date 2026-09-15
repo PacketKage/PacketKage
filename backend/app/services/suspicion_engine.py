@@ -28,8 +28,6 @@ SUSPICIOUS_PORTS = {
     1234: "common trojan port",
 }
 
-MIN_SEVERITY_SCORE = {"critical": 80, "high": 60, "medium": 40, "low": 20, "info": 0}
-
 
 @dataclass
 class RuleResult:
@@ -991,7 +989,7 @@ class SuspicionEngine:
         """id_by_flow: optional mapping to REAL persisted flow ids (by object identity)."""
         # tag each flow dict with its persisted id so rules can cross-reference
         for i, f in enumerate(flows):
-            f["_alert_flow_id"] = f.get("_db_id") or (
+            f["_alert_flow_id"] = (
                 id_by_flow.get(id(f)) if id_by_flow else None
             ) or f"flowidx-{i}"
 

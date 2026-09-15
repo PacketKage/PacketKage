@@ -15,12 +15,10 @@ import type {
   GraphProvenance,
   GraphV2,
   GraphV2Edge,
-  GraphV2Node,
   GraphV2NodeDetail,
   MappedClassification,
 } from '../types/api'
 import { Badge, formatBytes, formatTime } from '../components/ui'
-import { EvidenceTable } from '../components/EvidenceTable'
 
 // ---- shared chips ----------------------------------------------------------
 
@@ -493,32 +491,3 @@ function ChainStep({ index, label, children }: { index: number; label: string; c
     </li>
   )
 }
-
-// ---- v2 node/edge palette (theme-aware, mirrors v1 hues) ---------------------
-
-export const V2_NODE_KIND_STYLE: Record<string, { fill: string; ring: string; label: string }> = {
-  host: { fill: '#38bdf8', ring: 'host', label: 'hosts' },
-  domain: { fill: '#a78bfa', ring: 'domain', label: 'domains' },
-  service: { fill: '#34d399', ring: 'service', label: 'services' },
-  alert: { fill: '#f87171', ring: 'alert', label: 'alerts' },
-  incident: { fill: '#fbbf24', ring: 'incident', label: 'incidents' },
-  case: { fill: '#22d3ee', ring: 'case', label: 'cases' },
-  capture: { fill: '#94a3b8', ring: 'capture', label: 'captures' },
-}
-
-/** Simple stat row reused by the v2 panels. */
-export function StatLine({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-fg-subtle">{label}</span>
-      <span className="font-mono tabular-nums text-fg-muted">{value}</span>
-    </div>
-  )
-}
-
-/** Fallback renderer for arbitrary evidence objects. */
-export function EvidenceFallback({ data }: { data: Record<string, unknown> }) {
-  return <EvidenceTable data={data} />
-}
-
-export type { GraphV2Node }

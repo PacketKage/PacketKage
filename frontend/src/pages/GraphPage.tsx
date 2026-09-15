@@ -9,7 +9,7 @@ import { Modal } from '../components/Modal'
 import { Badge, SkeletonRow, Spinner } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useTheme } from '../hooks/theme'
-import type { Graph, GraphNodeData } from '../types/api'
+import type { Graph, GraphNodeData, GraphV2 } from '../types/api'
 import {
   EdgeProvenancePanel,
   EvidenceChainList,
@@ -529,6 +529,12 @@ function InvestigateCanvas({
     queryFn: () => api.getEvidenceGraph(effectiveCaptureId!),
     enabled: !!effectiveCaptureId,
   })
+  // v2 may resolve AFTER cy is created; the edge-tap handler captures it once,
+  // so route reads through a ref to avoid a stale closure.
+  const v2Ref = useRef<GraphV2 | undefined>(undefined)
+  useEffect(() => {
+    v2Ref.current = v2
+  }, [v2])
 
   const { data: graph, isError, refetch } = useQuery({
     queryKey: ['graph', effectiveCaptureId],
@@ -681,7 +687,7 @@ function InvestigateCanvas({
         setSelectedNode(null)
         setSelectedEdgeId(null)
         // v1 edge id: "src->dst:TYPE" — find the matching v2 edge
-        const match = v2?.edges.find(
+        const match = v2Ref.current?.edges.find(
           (x) => x.source === `host:${d.source}` && x.target === `host:${d.target}` && x.relationship === 'FLOW',
         )
         if (match) setSelectedEdgeId(match.id)
@@ -902,13 +908,14 @@ function InvestigateCanvas({
       </div>
 
       {/* Edge provenance modal (v2) */}
-      {selectedEdgeId && effectiveCaptureId && v2 && (
+      {selectedEdgeId && v2 && effectiveCaptureId && (
         <Modal
           title="Relationship provenance"
           subtitle={
-            v2.edges.find((e) => e.id === selectedEdgeId)
-              ? `${v2.edges.find((e) => e.id === selectedEdgeId)!.source} → ${v2.edges.find((e) => e.id === selectedEdgeId)!.target}`
-              : undefined
+            (() => {
+              const edge = v2.edges.find((e) => e.id === selectedEdgeId)
+              return edge ? `${edge.source} → ${edge.target}` : undefined
+            })()
           }
           onClose={() => setSelectedEdgeId(null)}
         >
