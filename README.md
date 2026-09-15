@@ -30,6 +30,7 @@ Packets → Flows → Hosts → Behaviors → Events → Investigation
 * Tracks packets, bytes, duration, and direction
 * Detects retransmissions, resets, and connection failures
 * Provides packet-level evidence for investigations
+* Delete captures (and all derived analysis data + the stored PCAP) via `DELETE /api/captures/{id}` or the Capture page — blocked with an actionable error while an analysis is still running
 
 ### Host & Protocol Analysis
 

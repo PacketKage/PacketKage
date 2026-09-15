@@ -70,6 +70,11 @@ export const api = {
 
   getCapture: (id: string) => request<Capture>(`/captures/${id}`),
 
+  deleteCapture: (id: string) =>
+    request<{ detail: string; id: string; file_removed: boolean }>(`/captures/${id}`, {
+      method: 'DELETE',
+    }),
+
   uploadCapture: (file: File) => {
     const form = new FormData()
     form.append('file', file)

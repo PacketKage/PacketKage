@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
 import { api } from '../api/client'
+import { Modal } from '../components/Modal'
 import { StatusPill, formatBytes } from '../components/ui'
 import { mutateError, mutateSuccess, watchJobForToast } from '../components/toasts'
 import { useCaptures } from '../hooks/captures'
@@ -11,6 +13,7 @@ export function CapturePage() {
   const [parser, setParser] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [liveJob, setLiveJob] = useState<Job | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Capture | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
@@ -42,6 +45,22 @@ export function CapturePage() {
       watchJobForToast(job.id)
     },
     onError: (err) => mutateError('Starting analysis', err),
+  })
+
+  // Delete needs to refresh everything that embeds capture data — the
+  // shared captures list plus case details whose stats include it.
+  const deleteCapture = useMutation({
+    mutationFn: (captureId: string) => api.deleteCapture(captureId),
+    onSuccess: async (_result, captureId) => {
+      setPendingDelete(null)
+      if (selectedCapture?.id === captureId) setSelectedCapture(null)
+      mutateSuccess('Capture deleted')
+      await queryClient.invalidateQueries({ queryKey: ['captures'] })
+      await queryClient.invalidateQueries({ queryKey: ['cases'] })
+    },
+    onError: (err) => {
+      mutateError('Delete', err, `capture-delete-${pendingDelete?.id ?? ''}`)
+    },
   })
 
   // SSE live progress for the running job (falls back to captures polling).
@@ -167,6 +186,17 @@ export function CapturePage() {
               </div>
             </div>
             <StatusPill status={current.status} />
+            <button
+              // `current` may be the synthesized analyzing object; the button
+              // is disabled exactly then, so the modal only ever gets a full row
+              onClick={() => setPendingDelete(current as Capture)}
+              aria-label={`Delete capture ${current.filename}`}
+              title="Delete this capture and its analysis data"
+              disabled={current.status === 'queued' || current.status === 'analyzing'}
+              className="rounded-lg p-1.5 text-fg-subtle transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+            >
+              <Trash2 size={15} aria-hidden />
+            </button>
             {current.status === 'created' && (
               <button
                 disabled={analyze.isPending}
@@ -279,22 +309,71 @@ export function CapturePage() {
           </div>
           <div className="divide-y divide-border/60">
             {captures.map((c) => (
-              <button
+              <div
                 key={c.id}
-                onClick={() => setSelectedCapture(c)}
-                className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-surface-3/30 ${
+                className={`group flex items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-surface-3/30 ${
                   current?.id === c.id ? 'bg-accent/5' : ''
                 }`}
               >
-                <span className="font-medium text-fg-muted">{c.filename}</span>
-                <StatusPill status={c.status} />
-                <span className="ml-auto text-xs text-fg-subtle">
-                  {c.packet_count.toLocaleString()} pkt · {formatBytes(c.size_bytes)}
-                </span>
-              </button>
+                <button
+                  onClick={() => setSelectedCapture(c)}
+                  className="flex flex-1 items-center gap-3 text-left"
+                >
+                  <span className="font-medium text-fg-muted">{c.filename}</span>
+                  <StatusPill status={c.status} />
+                  <span className="text-xs text-fg-subtle">
+                    {c.packet_count.toLocaleString()} pkt · {formatBytes(c.size_bytes)}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setPendingDelete(c)}
+                  aria-label={`Delete capture ${c.filename}`}
+                  title="Delete this capture and its analysis data"
+                  className="rounded-lg p-1.5 text-fg-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </div>
             ))}
           </div>
         </div>
+      )}
+
+      {/* Deletion confirmation */}
+      {pendingDelete && (
+        <Modal
+          title="Delete capture"
+          subtitle={pendingDelete.filename}
+          onClose={() => {
+            if (!deleteCapture.isPending) setPendingDelete(null)
+          }}
+        >
+          <div className="px-5 py-4">
+            <p className="text-sm text-fg">
+              This permanently deletes <b>{pendingDelete.filename}</b> (
+              {formatBytes(pendingDelete.size_bytes ?? 0)}), its stored PCAP file, and all
+              analysis data — flows, hosts, DNS/HTTP/TLS, alerts, timeline, evidence graph,
+              and jobs.
+            </p>
+            <p className="mt-2 text-sm font-medium text-danger">This cannot be undone.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDelete(null)}
+                disabled={deleteCapture.isPending}
+                className="rounded-lg px-4 py-2 text-sm text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteCapture.mutate(pendingDelete.id)}
+                disabled={deleteCapture.isPending}
+                className="rounded-lg bg-danger/10 px-4 py-2 text-sm font-medium text-danger ring-1 ring-danger/30 transition hover:bg-danger/20 disabled:opacity-50"
+              >
+                {deleteCapture.isPending ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )

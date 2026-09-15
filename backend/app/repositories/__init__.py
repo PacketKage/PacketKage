@@ -80,6 +80,66 @@ class CaptureRepository:
         self.db.commit()
         return self.get(capture_id)
 
+    def delete_capture(self, capture_id: str) -> dict:
+        """Delete a capture and ALL capture-scoped rows in ONE transaction.
+
+        Runs on a dedicated engine-level connection (engine.begin) so every
+        child-table DELETE, the case-membership cleanup and the parent-row
+        DELETE commit atomically — a failure anywhere rolls the whole delete
+        back and nothing is orphaned. Filesystem cleanup is deliberately NOT
+        part of this method: it is the API layer's job, after the commit
+        succeeds (a DB rollback must never have deleted the file first).
+
+        Returns {"id", "rows"} where rows counts deleted child rows.
+        Raises ValueError if the capture does not exist (the caller maps
+        that to a 404 before any deletion happens).
+        """
+        from app.core.database import engine as _engine
+
+        with _engine.begin() as conn:
+            exists = conn.execute(
+                select(func.count()).select_from(CaptureModel).where(CaptureModel.id == capture_id)
+            ).scalar_one()
+            if not exists:
+                conn.rollback()
+                raise ValueError(capture_id)
+
+            rows = 0
+            for model in (
+                PacketModel,
+                FlowModel,
+                HostModel,
+                DNSTransactionModel,
+                HTTPTransactionModel,
+                TLSSessionModel,
+                AlertModel,
+                TimelineEventModel,
+                GraphEdgeModel,
+                AnalysisJobModel,
+            ):
+                result = conn.execute(delete(model).where(model.capture_id == capture_id))
+                rows += result.rowcount or 0
+
+            # strip membership from every case that references the capture.
+            # JSON columns can't be queried with LIKE portably — read id +
+            # capture_ids as plain tuples (Core connection, no ORM loading)
+            # and rewrite only the cases that contain the id.
+            for case_id_value, case_ids in conn.execute(
+                select(CaseModel.id, CaseModel.capture_ids)
+            ).all():
+                if case_ids and capture_id in case_ids:
+                    conn.execute(
+                        update(CaseModel)
+                        .where(CaseModel.id == case_id_value)
+                        .values(
+                            capture_ids=[c for c in case_ids if c != capture_id],
+                            updated_at=utcnow(),
+                        )
+                    )
+
+            conn.execute(delete(CaptureModel).where(CaptureModel.id == capture_id))
+        return {"id": capture_id, "rows": rows}
+
 
 class FlowRepository:
     def __init__(self, db: Session) -> None:
@@ -626,6 +686,14 @@ class CaseRepository:
     def remove_capture(self, case: CaseModel, capture_id: str) -> CaseModel:
         ids = [c for c in (case.capture_ids or []) if c != capture_id]
         return self.update(case, capture_ids=ids)
+
+    def cases_containing(self, capture_id: str) -> list[CaseModel]:
+        """Cases whose capture_ids list references the capture."""
+        return [
+            case
+            for case in self.list(limit=500)
+            if capture_id in (case.capture_ids or [])
+        ]
 
     def delete(self, case_id: str) -> bool:
         case = self.get(case_id)

@@ -152,6 +152,56 @@ def analyze_capture(
     return job
 
 
+@router.delete("/{capture_id}")
+def delete_capture(capture_id: str, db: Session = Depends(get_db)):
+    """Delete a capture, its stored PCAP and every derived analysis row.
+
+    Blocked with 409 while an analysis is queued/running — the job thread
+    would otherwise re-insert rows for a capture that no longer exists
+    (there is no job cancellation; wait for the run to finish).
+    All DB cleanup happens in ONE transaction (see
+    CaptureRepository.delete_capture); the file is unlinked only AFTER
+    that commit succeeds, and only if it lives inside the upload dir.
+    """
+    capture = CaptureRepository(db).get(capture_id)
+    if capture is None:
+        raise HTTPException(404, "Capture not found")
+    if capture.status in ("queued", "analyzing"):
+        raise HTTPException(
+            409,
+            "Analysis is still running for this capture — wait for it to finish "
+            "before deleting (no job cancellation). The capture list refreshes "
+            "automatically when the run completes.",
+        )
+
+    stored_path = capture.stored_path
+    try:
+        CaptureRepository(db).delete_capture(capture_id)
+    except ValueError:
+        raise HTTPException(404, "Capture not found") from None
+    except Exception as exc:  # partial delete rolled back atomically
+        db.rollback()
+        raise HTTPException(500, f"Delete failed: {exc}") from exc
+
+    # ---- filesystem cleanup: best-effort, AFTER the commit -------------
+    # Only unlink files inside the configured upload dir — a corrupted or
+    # hand-edited stored_path must never make us delete arbitrary files.
+    file_removed = False
+    if stored_path:
+        try:
+            candidate = Path(stored_path).resolve()
+            upload_root = settings.upload_dir.resolve()
+            if candidate.is_relative_to(upload_root) and candidate.is_file():
+                candidate.unlink()
+                file_removed = True
+        except OSError:
+            # DB rows are already gone — a leftover file is preferable to
+            # failing a delete that succeeded transactionally.
+            file_removed = False
+
+    return {"detail": "deleted", "id": capture_id, "file_removed": file_removed}
+
+
 @router.get("/meta/parsers", response_model=dict[str, bool])
 def list_parsers():
     """Parser availability (scapy default; tshark optional)."""

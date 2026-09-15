@@ -204,4 +204,155 @@ describe('CapturePage', () => {
 
     vi.unstubAllGlobals()
   })
+
+  /* ---------------------------------------------------------------- */
+  /* Delete capture: list-row button → confirmation modal → mutation   */
+  /* → captures+cases invalidated. Cancel must not call the API.      */
+  /* ---------------------------------------------------------------- */
+
+  it('renders a delete button per capture row (accessible name includes filename)', () => {
+    seed()
+    expect(
+      screen.getByRole('button', { name: 'Delete capture c2_beacon.pcap' }),
+    ).toBeDefined()
+  })
+
+  it('confirming deletion calls the API and invalidates captures + cases', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/captures/cap1' && init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ detail: 'deleted', id: 'cap1', file_removed: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryClient = seededQueryClient([
+      { queryKey: ['captures'], data: [captureFixture()] },
+      { queryKey: ['parsers'], data: { scapy: true } },
+      { queryKey: ['liveInterfaces'], data: ['lo'] },
+      { queryKey: ['liveStatus'], data: null },
+    ])
+    const invalidated: string[] = []
+    const originalInvalidate = queryClient.invalidateQueries.bind(queryClient)
+    vi.spyOn(queryClient, 'invalidateQueries').mockImplementation((filters) => {
+      invalidated.push(JSON.stringify((filters as { queryKey: unknown[] }).queryKey))
+      return originalInvalidate(filters as never)
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/capture']}>
+          <Routes>
+            <Route path="/" element={<CapturePage />} />
+            <Route path="*" element={<CapturePage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    // open the confirmation modal
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Delete capture c2_beacon.pcap' }))
+    })
+    expect(screen.getByRole('dialog')).toBeDefined()
+    expect(screen.getByText(/permanently deletes/)).toBeDefined()
+    expect(screen.getByText(/This cannot be undone/)).toBeDefined()
+
+    // confirm
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    })
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/captures/cap1',
+        expect.objectContaining({ method: 'DELETE' }),
+      )
+    })
+    await waitFor(() => {
+      expect(invalidated.some((k) => k === '["captures"]')).toBe(true)
+      expect(invalidated.some((k) => k === '["cases"]')).toBe(true)
+    })
+
+    vi.unstubAllGlobals()
+  })
+
+  it('cancel closes the modal without calling the delete API', () => {
+    const fetchMock = vi.fn(async () => new Response('[]', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    seed()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Delete capture c2_beacon.pcap' }))
+    })
+    expect(screen.getByRole('dialog')).toBeDefined()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    // no DELETE ever issued
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/captures/cap1',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+
+    vi.unstubAllGlobals()
+  })
+
+  it('surfaces the backend 409 detail when deleting a capture that is still analyzing', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === '/api/captures/cap1' && init?.method === 'DELETE') {
+        return new Response(
+          JSON.stringify({ detail: 'Analysis is still running for this capture — wait for it to finish before deleting (no job cancellation). The capture list refreshes automatically when the run completes.' }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      return new Response('[]', { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const analyzing = captureFixture({ status: 'analyzing', analysis_progress: 40 })
+    const queryClient = seededQueryClient([
+      { queryKey: ['captures'], data: [analyzing] },
+      { queryKey: ['parsers'], data: { scapy: true } },
+      { queryKey: ['liveInterfaces'], data: ['lo'] },
+      { queryKey: ['liveStatus'], data: null },
+    ])
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/capture']}>
+          <Routes>
+            <Route path="/" element={<CapturePage />} />
+            <Route path="*" element={<CapturePage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Delete capture c2_beacon.pcap' }))
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    })
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/captures/cap1',
+        expect.objectContaining({ method: 'DELETE' }),
+      )
+    })
+    // modal stays open on error so the analyst sees the situation
+    expect(screen.getByRole('dialog')).toBeDefined()
+
+    vi.unstubAllGlobals()
+  })
 })
