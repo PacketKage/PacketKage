@@ -26,7 +26,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt ruff mypy
+          pip install -r requirements.txt -r requirements-dev.txt ruff mypy pip-audit
+
+      - name: pip-audit (vulnerable dependencies)
+        # Fails the build on any known vulnerability in the exact pinned
+        # backend dependency set (runtime + dev), including transitive deps.
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
 
       - name: Generate synthetic test PCAPs
         run: python ../scripts/generate_test_pcaps.py --out ../test-data/synthetic
@@ -57,6 +62,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: npm audit (vulnerable dependencies)
+        # Fails the build on any known vulnerability at moderate severity or
+        # higher in the frontend dependency tree (audits the full lockfile).
+        run: npm audit --audit-level=moderate
 
       - name: Oxlint
         run: npm run lint
