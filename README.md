@@ -126,13 +126,28 @@ PacketKage is not limited to security investigations. It also provides network h
 ## Quick Start
 
 
-### One command with Docker (no prerequisites except Docker)
+### One command with containers (no prerequisites except the runtime)
+
+**Docker:**
 
 ```bash
-docker compose up
+docker compose up -d --build
+```
+
+**Podman:**
+
+```bash
+podman-compose up -d --build
 ```
 
 Then open [http://localhost:8000](http://localhost:8000) the full app (frontend + API) runs in a single container, with analysis data persisted in a named volume.
+
+Shutdown:
+
+```bash
+docker compose down     # Docker
+podman-compose down     # Podman
+```
 
 ### Requirements (manual setup)
 
@@ -337,7 +352,13 @@ PacketKage can also record traffic directly from a network interface  no upload 
 
 The recorded traffic is saved as a PCAP and flows through the exact same analysis pipeline as an upload  flows, hosts, alerts, timeline, everything.
 
-> Note: live sniffing needs elevated permissions. Run the backend as root, or grant the Python process `CAP_NET_RAW`/`CAP_NET_ADMIN` capabilities. Interface listing and all other features work unprivileged.
+> Note: live sniffing needs elevated permissions — the container grants them via `cap_add` (`NET_RAW`/`NET_ADMIN` in `docker-compose.yml`), and the image ships file capabilities on the interpreter so the backend runs as a non-root user. For native (non-Docker) setups, grant the venv interpreter the capabilities instead of running as root (see the Backend section above). Interface listing and all other features work unprivileged.
+
+**Docker / Podman specifics:**
+
+* A container only captures traffic that crosses **its own network namespace**. The loopback interface (`lo`) records traffic generated inside the container; to capture *host* traffic, run the backend natively (host networking is limited under rootless container runtimes and changes the port-binding posture).
+* No `privileged: true` and no root process: the compose file adds exactly the two required capabilities, and the image runs as uid 1000 (`packetkage`).
+* **Upgrading an existing deployment:** volumes created by older (root-run) images have root-owned files. Either start with a fresh volume, or once: `docker run --rm -v packetkage-data:/data alpine chown -R 1000:1000 /data` (same idea with `podman`).
 
 ## Roadmap
 

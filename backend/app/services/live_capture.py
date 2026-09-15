@@ -38,6 +38,7 @@ class LiveState:
     stopped_at: float | None = None
     status: str = "running"  # running | stopped | failed
     error: str | None = None
+    final_packet_count: int | None = None  # frozen at stop() — sniffer is nulled
 
 
 class LiveCaptureManager:
@@ -102,6 +103,9 @@ class LiveCaptureManager:
             }
 
     def _current_packet_count(self) -> int:
+        s = self.state
+        if s is not None and s.final_packet_count is not None:
+            return s.final_packet_count  # terminal: frozen count from stop()
         sniffer = self._sniffer
         if sniffer is None:
             return 0
@@ -164,18 +168,21 @@ class LiveCaptureManager:
             # `sniffer.exception` WITHOUT raising from start(). Poll briefly
             # so permission problems fail here with a clear message instead
             # of "running" for the whole duration and exploding at stop().
+            #
+            # The poll also doubles as an attach grace period: scapy flips
+            # its `running` flag before the raw socket is fully attached, so
+            # traffic sent in the first ~0.5s can be missed (observed in
+            # containers). Waiting the full 0.75s window closes that race —
+            # `running`-early-break is NOT used on purpose.
             deadline = time.monotonic() + 0.75
             while time.monotonic() < deadline:
                 exc = self._exception_of(sniffer)
                 if exc is not None:
                     raise LiveCaptureError(self._friendly_sniff_error(exc)) from exc
-                if getattr(sniffer, "running", True):
-                    break
                 time.sleep(0.05)
-            else:
-                exc = self._exception_of(sniffer)
-                if exc is not None:
-                    raise LiveCaptureError(self._friendly_sniff_error(exc)) from exc
+            exc = self._exception_of(sniffer)
+            if exc is not None:
+                raise LiveCaptureError(self._friendly_sniff_error(exc)) from exc
 
             self._sniffer = sniffer
             self.state = LiveState(
@@ -243,6 +250,10 @@ class LiveCaptureManager:
 
             s.status = "stopped"
             s.stopped_at = time.time()
+            # Freeze the count on the state BEFORE the sniffer is nulled —
+            # status() derives packet_count from the sniffer while running,
+            # but self._sniffer is already None by the time it is next read.
+            s.final_packet_count = len(packets)
 
         capture = self._persist(packets, s)
         return {"state": self.status(), "capture": capture}
@@ -277,7 +288,7 @@ class LiveCaptureManager:
             )
             capture = repo.update(capture, stored_path=str(dest))
             cap_id, stored = capture.id, str(dest)
-            job_manager.submit(cap_id, _create_and_get_job(db, cap_id), stored, None)
+            job_manager.submit(cap_id, _create_and_get_job(db, cap_id).id, stored, None)
             return {
                 "id": cap_id,
                 "filename": filename,
