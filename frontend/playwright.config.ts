@@ -15,7 +15,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'cd ../backend && .venv/bin/python -m uvicorn app.main:app --port 8000',
+      // Use the active Python interpreter so this works in both a local venv
+      // and a fresh CI runner (which installs dependencies globally for the job).
+      command: 'cd ../backend && python -m uvicorn app.main:app --port 8000',
       port: 8000,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
