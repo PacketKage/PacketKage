@@ -152,6 +152,14 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```
 
+> **Linux — enable live capture (one-time):** live sniffing needs `CAP_NET_RAW`/`CAP_NET_ADMIN`. Grant them to the venv interpreter instead of running the backend as root:
+>
+> ```bash
+> sudo setcap cap_net_raw,cap_net_admin=eip "$(readlink -f .venv/bin/python)"
+> ```
+>
+> Re-run it after recreating the venv. Everything except live capture works without it.
+
 The API will be available at:
 
 [http://localhost:8000](http://localhost:8000)
