@@ -30,7 +30,7 @@ Packets → Flows → Hosts → Behaviors → Events → Investigation
 * Tracks packets, bytes, duration, and direction
 * Detects retransmissions, resets, and connection failures
 * Provides packet-level evidence for investigations
-* Delete captures (and all derived analysis data + the stored PCAP) via `DELETE /api/captures/{id}` or the Capture page — blocked with an actionable error while an analysis is still running
+* Delete captures (and all derived analysis data + the stored PCAP) via `DELETE /api/captures/{id}` or the Capture page - blocked with an actionable error while an analysis is still running
 
 ### Host & Protocol Analysis
 
@@ -152,7 +152,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```
 
-> **Linux — enable live capture (one-time):** live sniffing needs `CAP_NET_RAW`/`CAP_NET_ADMIN`. Grant them to the venv interpreter instead of running the backend as root:
+> **Linux - enable live capture (one-time):** live sniffing needs `CAP_NET_RAW`/`CAP_NET_ADMIN`. Grant them to the venv interpreter instead of running the backend as root:
 >
 > ```bash
 > sudo setcap cap_net_raw,cap_net_admin=eip "$(readlink -f .venv/bin/python)"
@@ -312,9 +312,9 @@ cd frontend
 npm test
 ```
 
-**End-to-end** (Playwright) — boots both servers and drives the real UI:
+**End-to-end** (Playwright) - boots both servers and drives the real UI:
 
-* **Smoke**: upload → analyze → alerts — the whole product in one path
+* **Smoke**: upload → analyze → alerts - the whole product in one path
 * **Graph**: edge-type filter toggles, scale tiers, and the evidence graph v2 (provenance, attack path, blast radius, evidence chain)
 * **Export**: CSV export of flows, and the empty-filter toast case
 
