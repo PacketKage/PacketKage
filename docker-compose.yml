@@ -2,8 +2,9 @@ services:
   packetkage:
     build: .
     ports:
-      - "8000:8000"
-      # LAN-reachable; to restrict to this machine use "127.0.0.1:8000:8000"
+      # Localhost-only by default. Do not expose this unauthenticated service
+      # beyond the host without placing it behind suitable access controls.
+      - "127.0.0.1:8000:8000"
     # Live capture: scapy needs CAP_NET_RAW (AF_PACKET socket) and
     # CAP_NET_ADMIN (interface bind). The image's file capabilities deliver
     # them to the non-root process; cap_add keeps the container's bounding

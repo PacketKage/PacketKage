@@ -142,6 +142,8 @@ podman-compose up -d --build
 
 Then open [http://localhost:8000](http://localhost:8000) the full app (frontend + API) runs in a single container, with analysis data persisted in a named volume.
 
+The compose configuration binds PacketKage to `127.0.0.1` by default, so it is available only on the machine running the container. Do not change the port mapping to expose it on a LAN or the internet until you have placed it behind appropriate authentication and access controls.
+
 Shutdown:
 
 ```bash
@@ -378,5 +380,4 @@ The core analysis pipeline, flow reconstruction, protocol analysis, behavioral d
 PacketKage is an evolving project. Contributions, ideas, bug reports, and improvements are welcome.
 
 If you have an idea that could make network traffic easier to understand or investigate, feel free to open an issue or submit a pull request.
-
 
