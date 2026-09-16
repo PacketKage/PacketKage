@@ -3,8 +3,9 @@ import { expect, test } from '@playwright/test'
 
 /**
  * Graph tier regression tests.
- * 1. Small capture: every edge type renders by default — including unknown
- *    ones like C2-PORT that the old hardcoded filter silently dropped.
+ * 1. Small capture: every relationship type in the v2 graph gets a dynamic
+ *    filter toggle (no hardcoded allowlist that silently drops unknown types),
+ *    and toggling one off removes exactly its edges.
  * 2. Large capture: the graph switches to the scale tier (leaf domains
  *    collapsed, selective labels) and stays interactive.
  */
@@ -55,20 +56,28 @@ test('small graph renders all edge types with dynamic filter toggles', async ({ 
   // Graph canvas renders nodes (cytoscape creates canvas elements)
   await expect(page.locator('canvas').first()).toBeVisible({ timeout: 30_000 })
 
-  // The legend must list the unknown edge type c2-port with its count —
-  // this is the type that was silently dropped by the old hardcoded filter
-  await expect(page.getByText('c2-port', { exact: true })).toBeVisible({ timeout: 30_000 })
+  // Filter rail is data-driven: every relationship in the v2 graph gets a
+  // toggle. groups/targets/triggered were absent from the old hardcoded set.
+  for (const rel of ['exposes', 'flow', 'groups', 'includes', 'targets', 'triggered']) {
+    await expect(page.getByText(rel, { exact: true })).toBeVisible({ timeout: 15_000 })
+  }
 
-  // Default state: hosts always render (2 hosts + 1 service node + 2 edges)
-  await expect(page.getByText('5 shown', { exact: true })).toBeVisible({ timeout: 15_000 })
+  // Total shown counter: nodes + edges visible under the current filters
+  const shownCount = async () => {
+    const texts = await page.getByText(/\d+ shown/).allTextContents()
+    return texts.map((t) => parseInt(t.replace(/\D/g, ''), 10)).find((x) => !Number.isNaN(x)) ?? 0
+  }
+  // Default state: everything renders (hosts + service node + all edge types)
+  const countBefore = await shownCount()
+  expect(countBefore).toBeGreaterThan(0)
 
-  // Toggling c2-port off removes its edge (hosts stay)
-  await page.getByText('c2-port', { exact: true }).click()
-  await expect(page.getByText('4 shown', { exact: true })).toBeVisible({ timeout: 15_000 })
+  // Toggling a relationship off removes exactly its edges (nodes stay)
+  await page.getByText('triggered', { exact: true }).click()
+  await expect.poll(shownCount).toBe(countBefore - 3)
 
   // Toggling it back on restores the full graph
-  await page.getByText('c2-port', { exact: true }).click()
-  await expect(page.getByText('5 shown', { exact: true })).toBeVisible({ timeout: 15_000 })
+  await page.getByText('triggered', { exact: true }).click()
+  await expect.poll(shownCount).toBe(countBefore)
 })
 
 test('large graph switches to scale tier and stays interactive', async ({ page }) => {
@@ -99,11 +108,15 @@ test('large graph switches to scale tier and stays interactive', async ({ page }
   await expect(canvas).toBeVisible({ timeout: 5_000 })
 
   // override: show leaf domains → the button disappears, element count grows
-  const countBefore = parseInt(((await page.getByText(/\d+ shown/).textContent()) ?? '0').replace(/\D/g, ''))
+  const shownCount = async () => {
+    const texts = await page.getByText(/\d+ shown/).allTextContents()
+    return texts.map((t) => parseInt(t.replace(/\D/g, ''), 10)).find((x) => !Number.isNaN(x)) ?? 0
+  }
+  const countBefore = await shownCount()
   await showLeaves.click()
   await expect(page.getByText(/leaf domains hidden — show/)).toBeHidden({ timeout: 15_000 })
   const t1 = Date.now()
-  const countAfter = parseInt(((await page.getByText(/\d+ shown/).textContent()) ?? '0').replace(/\D/g, ''))
+  const countAfter = await shownCount()
   console.log(`[perf] leaf-override re-layout (75 new nodes): ${Date.now() - t1}ms`)
   expect(countAfter).toBeGreaterThan(countBefore)
 })

@@ -1,12 +1,12 @@
-import type { Graph, GraphNodeData } from '../types/api'
+import type { GraphV2, GraphV2Node } from '../types/api'
 
 /**
- * Adaptive-visualization logic for the network graph.
+ * Adaptive-visualization logic for the evidence graph (v2).
  *
  * The graph renders in one of three tiers based on visible node count, so a
  * small PCAP stays fully detailed while a large capture automatically switches
  * to a scalable representation (draft layout, selective labels, collapsed
- * leaf domains) instead of an unreadable hairball.
+ * leaf nodes) instead of an unreadable hairball.
  */
 
 export type Tier = 'detail' | 'balanced' | 'scale'
@@ -20,23 +20,22 @@ export function computeTier(visibleNodeCount: number): Tier {
 }
 
 /** node id → incident edge count (both directions). */
-export function buildDegreeMap(graph: Graph): Map<string, number> {
+export function buildDegreeMap(graph: GraphV2): Map<string, number> {
   const deg = new Map<string, number>()
   for (const e of graph.edges) {
-    deg.set(e.data.source, (deg.get(e.data.source) ?? 0) + 1)
-    deg.set(e.data.target, (deg.get(e.data.target) ?? 0) + 1)
+    deg.set(e.source, (deg.get(e.source) ?? 0) + 1)
+    deg.set(e.target, (deg.get(e.target) ?? 0) + 1)
   }
   return deg
 }
 
+export const KIND_ALERT_WEIGHT = { host: 1, domain: 0.6, service: 0.6, alert: 0.4 } as const
+
 /**
  * Importance score driving node size, label selection and top-N ordering.
- * Alert hosts dominate, then connectivity, then traffic volume.
+ * Alert-flagged nodes dominate, then connectivity, then traffic volume.
  */
-export function importanceScore(
-  node: GraphNodeData,
-  degree: number,
-): number {
+export function importanceScore(node: Pick<GraphV2Node, 'kind' | 'alert_count' | 'bytes_sent' | 'bytes_received'>, degree: number): number {
   let score = degree * 5
   const alerts = node.alert_count ?? 0
   if (alerts > 0) score += 100 * alerts
@@ -52,14 +51,14 @@ export interface NodeMetrics {
   ranked: string[]
 }
 
-export function computeNodeMetrics(graph: Graph): NodeMetrics {
+export function computeNodeMetrics(graph: GraphV2): NodeMetrics {
   const degrees = buildDegreeMap(graph)
   const scores = new Map<string, number>()
   for (const n of graph.nodes) {
-    scores.set(n.data.id, importanceScore(n.data, degrees.get(n.data.id) ?? 0))
+    scores.set(n.id, importanceScore(n, degrees.get(n.id) ?? 0))
   }
   const ranked = [...graph.nodes]
-    .map((n) => n.data.id)
+    .map((n) => n.id)
     .sort((a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0))
   return { scores, degrees, ranked }
 }
@@ -76,14 +75,14 @@ export const LABEL_LIMITS: Record<Tier, number | null> = {
  * detail → all; balanced → top-40 + alerts; scale → alerts only (hover and
  * selection reveal the rest — permanent labels are the hairball's fuel).
  */
-export function labeledNodeIds(metrics: NodeMetrics, tier: Tier, graph: Graph): Set<string> {
+export function labeledNodeIds(metrics: NodeMetrics, tier: Tier, graph: GraphV2): Set<string> {
   const labeled = new Set<string>()
   for (const n of graph.nodes) {
-    if ((n.data.alert_count ?? 0) > 0) labeled.add(n.data.id)
+    if ((n.alert_count ?? 0) > 0) labeled.add(n.id)
   }
   const limit = LABEL_LIMITS[tier]
   if (limit === null) {
-    for (const n of graph.nodes) labeled.add(n.data.id)
+    for (const n of graph.nodes) labeled.add(n.id)
     return labeled
   }
   if (limit === 0) return labeled
@@ -94,12 +93,12 @@ export function labeledNodeIds(metrics: NodeMetrics, tier: Tier, graph: Graph): 
   return labeled
 }
 
-/** degree ≤ 1 domain nodes — pure label noise at scale (DGA junk etc.). */
-export function leafDomainIds(metrics: NodeMetrics, graph: Graph): Set<string> {
+/** degree ≤ 1 domain/kind nodes — pure label noise at scale (DGA junk etc.). */
+export function leafDomainIds(metrics: NodeMetrics, graph: GraphV2): Set<string> {
   const leaves = new Set<string>()
   for (const n of graph.nodes) {
-    if (n.data.type === 'domain' && (metrics.degrees.get(n.data.id) ?? 0) <= 1) {
-      leaves.add(n.data.id)
+    if (n.kind === 'domain' && (metrics.degrees.get(n.id) ?? 0) <= 1) {
+      leaves.add(n.id)
     }
   }
   return leaves
@@ -134,18 +133,15 @@ export function elasticityFor(isHubEdge: boolean): number {
 }
 
 /** Edges touching a hub node (degree > HUB_DEGREE) get curved at scale. */
-export function hubEdgeIds(
-  degrees: Map<string, number>,
-  graph: Graph,
-): Set<string> {
+export function hubEdgeIds(degrees: Map<string, number>, graph: GraphV2): Set<string> {
   const hubs = new Set<string>()
   for (const [id, deg] of degrees) {
     if (deg > HUB_DEGREE) hubs.add(id)
   }
   const ids = new Set<string>()
   for (const e of graph.edges) {
-    if (hubs.has(e.data.source) || hubs.has(e.data.target)) {
-      ids.add(e.data.id)
+    if (hubs.has(e.source) || hubs.has(e.target)) {
+      ids.add(e.id)
     }
   }
   return ids

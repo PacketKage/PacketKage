@@ -83,6 +83,14 @@ def get_evidence_graph(
     Edges are filtered in SQL (relationship, provenance class, time-window
     overlap, alert presence, focus node) and the returned subgraph is capped
     at `limit` nodes — `truncated` flags when more data exists.
+
+    Pagination: `offset` and `limit` define a window over the degree-ranked
+    node list. For a focused `node_id`, the focus node and its neighbors are
+    prioritized within the limit.
+
+    Lazy backfill: for captures analyzed before Graph 2.0 (no edges exist),
+    the graph is materialized on first request. This is idempotent and
+    race-safe via transaction.
     """
     capture = capture_or_404(db, capture_id)
     repo = GraphEdgeRepository(db)
@@ -106,6 +114,7 @@ def get_evidence_graph(
         if bad:
             raise HTTPException(400, f"Unknown provenance {bad}; allowed: {sorted(GRAPH_PROVENANCE)}")
 
+    # Get all filtered edges (capped at 4000 by repository)
     edges = repo.list_for_capture(
         capture_id,
         relationships=rel_list,
@@ -117,14 +126,21 @@ def get_evidence_graph(
     )
     total_edges = repo.count_for_capture(capture_id)
 
-    # node assembly capped at `limit` (highest-degree first so focus survives)
+    # Build degree map from filtered edges
     degree: dict[str, int] = defaultdict(int)
     for e in edges:
         degree[e.source_id] += 1
         degree[e.target_id] += 1
+
+    # Rank nodes by degree (highest first)
     ranked = sorted(degree.keys(), key=lambda n: -degree[n])
-    kept = set(ranked[: limit + offset])
+
+    # Determine kept nodes with proper pagination
+    kept: set[str] = set()
+
     if node_id:
+        # Focus mode: always include focus node + its neighbors, then fill
+        # remaining slots with highest-degree nodes
         kept.add(node_id)
         for e in edges:
             if e.source_id == node_id:
@@ -132,8 +148,27 @@ def get_evidence_graph(
             elif e.target_id == node_id:
                 kept.add(e.source_id)
 
+        # Add highest-degree nodes up to limit (excluding already kept)
+        remaining = limit - len(kept)
+        if remaining > 0:
+            for nid in ranked:
+                if nid not in kept:
+                    kept.add(nid)
+                    remaining -= 1
+                    if remaining <= 0:
+                        break
+    else:
+        # Normal pagination: window over ranked nodes
+        start = offset
+        end = offset + limit
+        for nid in ranked[start:end]:
+            kept.add(nid)
+
+    # Build kept edges
     kept_edges = [e for e in edges if e.source_id in kept and e.target_id in kept]
-    truncated = len(ranked) > len(kept) or len(edges) >= 4000 or (limit + offset) < len(ranked)
+
+    # Truncated if there are more nodes than we returned
+    truncated = len(ranked) > len(kept) + offset if not node_id else len(ranked) > limit
 
     nodes: list[GraphV2Node] = []
     for nid in sorted(kept):
@@ -151,6 +186,7 @@ def get_evidence_graph(
         "edge_count": len(kept_edges),
         "total_edges_in_capture": total_edges,
         "node_count": len(nodes),
+        "total_nodes": len(ranked),
         "relationships": sorted({e.relationship for e in kept_edges}),
         "provenance_classes": sorted({e.provenance for e in kept_edges}),
         "alert_backed_edges": sum(1 for e in kept_edges if e.alert_ids),
@@ -172,10 +208,6 @@ def get_node_detail(
     """Node metadata + all incident edges (bounded) for the investigation panel."""
     capture_or_404(db, capture_id)
     repo = GraphEdgeRepository(db)
-    if repo.count_for_capture(capture_id) == 0:
-        from app.services.evidence_graph import ensure_materialized
-
-        ensure_materialized(db, capture_or_404(db, capture_id))
 
     meta = hydrate_node(capture_id, node_id, db)
     if meta is None:
@@ -268,19 +300,17 @@ def get_attack_paths(
 ):
     """Bounded attack-path extraction between two entities.
 
-    Every hop is an observed/correlated edge; the assembled PATH is an
-    inference, labeled as such. Bounded: depth ≤ 4, paths ≤ 3, visited
-    nodes ≤ 200 — small results by construction.
+    Every hop is an OBSERVED relationship; the assembled PATH is an
+    inference, labeled as such. Each hop includes its provenance.
+    Bounded: depth ≤ 4, paths ≤ 3, visited nodes ≤ 200.
     """
     capture_or_404(db, capture_id)
-    repo = GraphEdgeRepository(db)
-    if repo.count_for_capture(capture_id) == 0:
-        from app.services.evidence_graph import ensure_materialized
-
-        ensure_materialized(db, capture_or_404(db, capture_id))
 
     result = find_attack_paths(db, capture_id, source, target, max_depth, max_paths)
-    paths = [GraphV2Path(nodes=p, length=len(p) - 1) for p in result["paths"]]
+    paths = [
+        GraphV2Path(nodes=p["nodes"], length=p["length"])
+        for p in result["paths"]
+    ]
     return GraphV2PathsOut(
         paths=paths,
         visited=result["visited"],
@@ -296,17 +326,12 @@ def get_blast_radius(
     depth: int = Query(default=2, ge=1, le=GraphCaps.MAX_BLAST_DEPTH),
     db: Session = Depends(get_db),
 ):
-    """Blast-radius analysis from a host, strictly bounded.
+    """Blast-radius analysis from a node, strictly bounded.
 
-    Depth ≤ 3, node cap 150 (hard 500). Reachability summary computed only
-    from observed relationships — no invented exposure.
+    Depth ≤ 3, node cap 150 (hard 500). Reachability computed only
+    from OBSERVED relationships — no correlated or enriched edges.
     """
     capture_or_404(db, capture_id)
-    repo = GraphEdgeRepository(db)
-    if repo.count_for_capture(capture_id) == 0:
-        from app.services.evidence_graph import ensure_materialized
-
-        ensure_materialized(db, capture_or_404(db, capture_id))
 
     result = blast_radius(db, capture_id, host, depth)
     if result.get("reason") == "unknown node":

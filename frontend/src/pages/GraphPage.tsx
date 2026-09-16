@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import cytoscape, { type Core, type ElementDefinition } from 'cytoscape'
+import cytoscape, {
+  type Core,
+  type EdgeSingular,
+  type ElementDefinition,
+  type NodeSingular,
+} from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { api } from '../api/client'
 import { CapturePicker } from '../components/CapturePicker'
 import { ErrorState } from '../components/states'
-import { Modal } from '../components/Modal'
 import { Badge, SkeletonRow, Spinner } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useTheme } from '../hooks/theme'
-import type { Graph, GraphNodeData, GraphV2 } from '../types/api'
+import type {
+  GraphNodeKind,
+  GraphProvenance,
+  GraphV2,
+  GraphV2Edge,
+} from '../types/api'
 import {
   EdgeProvenancePanel,
   EvidenceChainList,
@@ -26,92 +35,138 @@ import {
   nodeSize,
   viewportForTier,
   HUB_DEGREE,
+  type Tier,
 } from './graph-scaling'
 
 cytoscape.use(fcose)
 
-// Theme-aware palette: same hue identities across themes (sky=host/DNS,
-// violet=domain/TLS, emerald=service/EXPOSES, amber=HTTP) but each theme
-// gets values tuned for its canvas — dark-mode brights / light-mode deeps.
-const DARK_PALETTE = {
-  nodeFills: { host: '#1e293b', domain: '#1e1b2e', service: '#17251f' },
-  label: '#94a3b8',
-  fallbackEdge: '#f472b6',
-  edges: {
-    DNS: '#38bdf8',
-    RESOLVES_TO: '#64748b',
-    HTTP: '#fbbf24',
-    HTTPS: '#fbbf24',
-    TLS: '#a78bfa',
-    TCP: '#475569',
-    UDP: '#7c3aed',
-    EXPOSES: '#34d399',
-  },
+// Theme-aware palettes. Node kind colors stay identical across themes (sky=host,
+// violet=domain, emerald=service, red=alert, orange=incident, pink=case,
+// teal=capture); fills swap dark-deep / light-wash per theme.
+type KindStyle = { color: string; fill: string; shape: cytoscape.Css.NodeShape }
+
+const KIND_COLORS: Record<GraphNodeKind, string> = {
+  host: '#38bdf8',
+  domain: '#a78bfa',
+  service: '#34d399',
+  alert: '#ef4444',
+  incident: '#fb923c',
+  case: '#f472b6',
+  capture: '#2dd4bf',
 }
 
-const LIGHT_PALETTE = {
-  nodeFills: { host: '#e0f2fe', domain: '#ede9fe', service: '#d1fae5' },
-  label: '#64748b',
-  fallbackEdge: '#db2777',
-  edges: {
-    DNS: '#0284c7',
-    RESOLVES_TO: '#94a3b8',
-    HTTP: '#d97706',
-    HTTPS: '#d97706',
-    TLS: '#7c3aed',
-    TCP: '#94a3b8',
-    UDP: '#6d28d9',
-    EXPOSES: '#059669',
-  },
+const KIND_FILLS_DARK: Record<GraphNodeKind, string> = {
+  host: '#1e293b',
+  domain: '#1e1b2e',
+  service: '#17251f',
+  alert: '#3b0f14',
+  incident: '#3b2008',
+  case: '#3b1130',
+  capture: '#0f2e2c',
 }
 
-const nodeBorderColor = (type: string, theme: string) =>
-  theme === 'light'
-    ? { host: '#0284c7', domain: '#7c3aed', service: '#059669' }[type] ?? '#0284c7'
-    : { host: '#38bdf8', domain: '#a78bfa', service: '#34d399' }[type] ?? '#38bdf8'
+const KIND_FILLS_LIGHT: Record<GraphNodeKind, string> = {
+  host: '#e0f2fe',
+  domain: '#ede9fe',
+  service: '#d1fae5',
+  alert: '#fee2e2',
+  incident: '#ffedd5',
+  case: '#fce7f3',
+  capture: '#ccfbf1',
+}
 
-const KNOWN_EDGE_TYPES = ['DNS', 'RESOLVES_TO', 'HTTP', 'TLS', 'TCP', 'UDP', 'EXPOSES']
-// HTTP and HTTPS share a color/toggle; HTTPS maps onto the HTTP filter
-const filterForEdge = (type: string) => (type === 'HTTPS' ? 'HTTP' : type)
-const edgeColor = (type: string, palette: GraphPalette): string =>
-  (palette.edges as Record<string, string>)[type] ?? palette.fallbackEdge
-const edgeLabel = (type: string) =>
-  type === 'RESOLVES_TO' ? 'resolves to' : type.toLowerCase()
+const KIND_SHAPES: Record<GraphNodeKind, cytoscape.Css.NodeShape> = {
+  host: 'ellipse',
+  domain: 'diamond',
+  service: 'hexagon',
+  alert: 'triangle',
+  incident: 'octagon',
+  case: 'round-rectangle',
+  capture: 'rectangle',
+}
 
-type EdgeGroup = { key: string; color: string; label: string; count: number }
+// relationship → edge color; anything not listed falls back to a neutral.
+const RELATIONSHIP_COLORS: Record<string, string> = {
+  FLOW: '#475569',
+  DNS_QUERY: '#38bdf8',
+  RESOLVES_TO: '#64748b',
+  TLS_SNI: '#a78bfa',
+  HTTP_HOST: '#fbbf24',
+  EXPOSES: '#34d399',
+  TRIGGERED: '#ef4444',
+  TARGETS: '#fb923c',
+  GROUPS: '#f472b6',
+  INCLUDES: '#e879f9',
+}
 
-type GraphPalette = typeof DARK_PALETTE
+// provenance → line style: solid = seen in traffic, dashed = correlation,
+// dotted = enrichment/inference.
+const PROVENANCE_LINE: Record<GraphProvenance, 'solid' | 'dashed' | 'dotted'> = {
+  observed: 'solid',
+  correlated: 'dashed',
+  enriched: 'dotted',
+}
 
-// Group the actual edge types found in this graph into toggle entries:
-// known types get their canonical toggle; anything else (QUIC, C2-PORT, …)
-// becomes its own toggle so no edge is implicitly hidden.
-function buildEdgeGroups(graph: Graph, palette: GraphPalette): EdgeGroup[] {
-  const counts = new Map<string, { count: number; original: string }>()
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  DNS_QUERY: 'dns query',
+  RESOLVES_TO: 'resolves to',
+  TLS_SNI: 'tls sni',
+  HTTP_HOST: 'http host',
+  FLOW: 'flow',
+  EXPOSES: 'exposes',
+  TRIGGERED: 'triggered',
+  TARGETS: 'targets',
+  GROUPS: 'groups',
+  INCLUDES: 'includes',
+}
+
+const relationshipLabel = (r: string) => RELATIONSHIP_LABELS[r] ?? r.replaceAll('_', ' ').toLowerCase()
+
+// Backend caps (mirrors GraphCaps in evidence_graph.py).
+const CANVAS_DEFAULT_LIMIT = 300
+const CANVAS_HARD_LIMIT = 1000
+
+type RelationGroup = { relationship: string; color: string; label: string; count: number }
+
+function buildRelationGroups(graph: GraphV2): RelationGroup[] {
+  const counts = new Map<string, number>()
   for (const e of graph.edges) {
-    const key = filterForEdge(e.data.type)
-    const cur = counts.get(key)
-    if (cur) {
-      cur.count += 1
-    } else {
-      counts.set(key, { count: 1, original: e.data.type })
-    }
+    counts.set(e.relationship, (counts.get(e.relationship) ?? 0) + 1)
   }
-  const groups: EdgeGroup[] = [...KNOWN_EDGE_TYPES, ...[...counts.keys()].filter(
-    (k) => !KNOWN_EDGE_TYPES.includes(k),
-  )]
-    .filter((key) => counts.has(key))
-    .map((key) => {
-      const { count } = counts.get(key)!
-      return { key, color: edgeColor(key, palette), label: edgeLabel(key), count }
-    })
-  return groups
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([relationship, count]) => ({
+      relationship,
+      color: RELATIONSHIP_COLORS[relationship] ?? '#94a3b8',
+      label: relationshipLabel(relationship),
+      count,
+    }))
 }
 
-interface VisibleElements {
-  elements: ElementDefinition[]
-  visibleIds: Set<string>
-  hiddenLeafCount: number
-  tier: 'detail' | 'balanced' | 'scale'
+function kindStyle(kind: GraphNodeKind, theme: string): KindStyle {
+  return {
+    color: KIND_COLORS[kind] ?? '#94a3b8',
+    fill: (theme === 'light' ? KIND_FILLS_LIGHT : KIND_FILLS_DARK)[kind] ?? '#1e293b',
+    shape: KIND_SHAPES[kind] ?? 'ellipse',
+  }
+}
+
+function presentKinds(graph: GraphV2): Set<GraphNodeKind> {
+  return new Set(graph.nodes.map((n) => n.kind))
+}
+
+function presentProvenance(graph: GraphV2): Set<GraphProvenance> {
+  return new Set(graph.edges.map((e) => e.provenance))
+}
+
+function toggleInSet<T extends string>(current: Iterable<T>, name: T): Set<T> {
+  const next = new Set<T>(current)
+  if (next.has(name)) {
+    next.delete(name)
+  } else {
+    next.add(name)
+  }
+  return next
 }
 
 export type GraphMode = 'investigate' | 'attack-path' | 'blast' | 'timeline' | 'evidence'
@@ -126,14 +181,11 @@ const MODES: { id: GraphMode; label: string }[] = [
 
 /**
  * Graph 2.0 workspace: five investigation modes over one capture.
- * - investigate: the proven v1 canvas (tier engine, filters, legend) +
- *   v2 provenance panels on edge/node selection
- * - attack-path / blast: bounded v2 traversals rendered as focused lists
- * - timeline / evidence: existing data viewed through the investigation lens
+ * The Investigate canvas renders Graph v2 natively — node/edge ids ARE the
+ * v2 ids (`host:…`, `domain:…`, `alert:…`, …) — so selection flows straight
+ * into the v2 detail panels with no id rewriting.
  */
 export function GraphPage() {
-  // capture selection lives HERE (single source of truth) — child modes
-  // receive the effective id as a prop so the picker and all modes agree
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
   const [mode, setMode] = useState<GraphMode>('investigate')
 
@@ -500,7 +552,14 @@ function ErrorlessEmpty({ text }: { text: string }) {
   )
 }
 
-// ---------------- Investigate canvas (v1 engine + v2 panels) ----------------
+// ---------------- Investigate canvas (Graph v2 only) ----------------
+
+interface VisibleElements {
+  elements: ElementDefinition[]
+  visibleIds: Set<string>
+  hiddenLeafCount: number
+  tier: Tier
+}
 
 function InvestigateCanvas({
   onModeChange,
@@ -511,87 +570,139 @@ function InvestigateCanvas({
 }) {
   const { analyzed } = useSelectedCapture()
   const { theme } = useTheme()
-  const palette = theme === 'light' ? LIGHT_PALETTE : DARK_PALETTE
-  const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-  const [edgeFilters, setEdgeFilters] = useState<Set<string> | null>(null)
-  const [nodeFilters, setNodeFilters] = useState<Set<string>>(
-    () => new Set(['domain', 'service']),
-  )
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<GraphV2Edge | null>(null)
+  // null = all enabled (fresh capture); user toggles carve out exclusions.
+  const [kindFilters, setKindFilters] = useState<Set<GraphNodeKind> | null>(null)
+  const [relationFilters, setRelationFilters] = useState<Set<string> | null>(null)
+  const [provenanceFilters, setProvenanceFilters] = useState<Set<GraphProvenance> | null>(null)
   const [showLeaves, setShowLeaves] = useState(false)
+  const [limit, setLimit] = useState(CANVAS_DEFAULT_LIMIT)
+  const [searchQuery, setSearchQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<Core | null>(null)
   const cyCaptureRef = useRef<string | null>(null)
 
-  // v2 evidence graph (parallel load): powers edge provenance + node panels
-  const { data: v2 } = useQuery({
-    queryKey: ['evidenceGraph', effectiveCaptureId],
-    queryFn: () => api.getEvidenceGraph(effectiveCaptureId!),
-    enabled: !!effectiveCaptureId,
-  })
-  // v2 may resolve AFTER cy is created; the edge-tap handler captures it once,
-  // so route reads through a ref to avoid a stale closure.
-  const v2Ref = useRef<GraphV2 | undefined>(undefined)
-  useEffect(() => {
-    v2Ref.current = v2
-  }, [v2])
-
+  // Graph v2 is the ONLY source for the canvas. `limit` grows for large
+  // captures (status strip "load more"); the API returns `truncated` when a
+  // bigger subgraph exists.
   const { data: graph, isError, refetch } = useQuery({
-    queryKey: ['graph', effectiveCaptureId],
-    queryFn: () => api.getGraph(effectiveCaptureId!),
+    queryKey: ['evidenceGraph', effectiveCaptureId, limit],
+    queryFn: () => api.getEvidenceGraph(effectiveCaptureId!, { limit }),
     enabled: !!effectiveCaptureId,
   })
 
-  const edgeGroups = useMemo(
-    () => (graph ? buildEdgeGroups(graph, palette) : []),
-    [graph, palette],
+  // Fresh capture → reset user overrides and node cap
+  useEffect(() => {
+    setKindFilters(null)
+    setRelationFilters(null)
+    setProvenanceFilters(null)
+    setShowLeaves(false)
+    setSelectedNodeId(null)
+    setSelectedEdge(null)
+    setLimit(CANVAS_DEFAULT_LIMIT)
+    setSearchQuery('')
+  }, [effectiveCaptureId])
+
+  const relationGroups = useMemo(
+    () => (graph ? buildRelationGroups(graph) : []),
+    [graph],
   )
+
+  // One-tap filter presets: All (default), Observed-only (solid lines) and
+  // Alert-focused (alert + incident backbone).
+  type Preset = 'all' | 'observed' | 'alerts'
+  const PRESETS: { id: Preset; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'observed', label: 'Observed' },
+    { id: 'alerts', label: 'Alerts' },
+  ]
+  const applyPreset = (preset: Preset) => {
+    if (preset === 'all') {
+      setKindFilters(null)
+      setRelationFilters(null)
+      setProvenanceFilters(null)
+    } else if (preset === 'observed') {
+      setKindFilters(null)
+      setRelationFilters(null)
+      setProvenanceFilters(new Set(['observed']))
+    } else {
+      setKindFilters(new Set(['alert', 'incident']))
+      setRelationFilters(null)
+      setProvenanceFilters(null)
+    }
+  }
+  const activePreset: Preset =
+    kindFilters === null && relationFilters === null && provenanceFilters === null
+      ? 'all'
+      : provenanceFilters?.has('observed') && provenanceFilters.size === 1 && kindFilters === null && relationFilters === null
+        ? 'observed'
+        : kindFilters?.has('alert') && kindFilters?.has('incident') && relationFilters === null && provenanceFilters === null
+          ? 'alerts'
+          : 'all'
   const metrics = useMemo(() => (graph ? computeNodeMetrics(graph) : null), [graph])
   const leaves = useMemo(() => (graph && metrics ? leafDomainIds(metrics, graph) : null), [graph, metrics])
 
-  // null = all enabled (fresh capture); user toggles carve out exclusions.
-  // Memoized: a fresh Set every render would recompute `visible` and re-run
-  // the cytoscape diff/stylesheet effect on every unrelated state change.
-  const activeEdgeFilters = useMemo(
-    () => edgeFilters ?? new Set(edgeGroups.map((g) => g.key)),
-    [edgeFilters, edgeGroups],
-  )
-  const toggleEdgeFilter = (key: string) => {
-    setEdgeFilters(toggleInSet(activeEdgeFilters, key))
-  }
+  // Highlight matches across label, id, ip and domain — case-insensitive and
+  // ranked by importance so the interesting node is the first hit.
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q || !graph || !metrics) return []
+    return graph.nodes
+      .filter((n) => {
+        const hay = [n.label, n.id, n.ip, n.hostname].filter(Boolean).join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+      .sort((a, b) => (metrics.scores.get(b.id) ?? 0) - (metrics.scores.get(a.id) ?? 0))
+      .slice(0, 8)
+  }, [searchQuery, graph, metrics])
 
-  // Visible elements after node/edge filters and (at scale) leaf collapsing.
-  // Tier is decided from the PRE-collapse node count — collapsing leaves is
-  // what the scale tier does, so it can't depend on its own output.
+  const activeKindFilters = useMemo(
+    () => kindFilters ?? (graph ? presentKinds(graph) : new Set<GraphNodeKind>()),
+    [kindFilters, graph],
+  )
+  const activeRelationFilters = useMemo(
+    () => relationFilters ?? new Set(relationGroups.map((g) => g.relationship)),
+    [relationFilters, relationGroups],
+  )
+  const activeProvenanceFilters = useMemo(
+    () => provenanceFilters ?? (graph ? presentProvenance(graph) : new Set<GraphProvenance>()),
+    [provenanceFilters, graph],
+  )
+
+  // Visible elements after kind/relationship/provenance filters and (at scale)
+  // leaf collapsing. Tier is decided from the PRE-collapse count — collapsing
+  // leaves is what the scale tier does, so it can't depend on its own output.
   const visible = useMemo<VisibleElements>(() => {
     if (!graph) return { elements: [], visibleIds: new Set(), hiddenLeafCount: 0, tier: 'detail' }
-    const preCollapseTier = tierOf(graph, nodeFilters)
+    const preCollapseTier = computeTier(graph.stats.total_nodes ?? graph.nodes.length)
     const collapseLeaves = !showLeaves && preCollapseTier === 'scale'
     const nodes = graph.nodes.filter((n) => {
-      if (n.data.type !== 'host' && n.data.type && !nodeFilters.has(n.data.type)) return false
-      if (collapseLeaves && leaves?.has(n.data.id)) return false
+      if (!activeKindFilters.has(n.kind)) return false
+      if (collapseLeaves && leaves?.has(n.id)) return false
       return true
     })
-    const nodeIds = new Set(nodes.map((n) => n.data.id))
+    const nodeIds = new Set(nodes.map((n) => n.id))
     const edges = graph.edges.filter(
       (e) =>
-        activeEdgeFilters.has(filterForEdge(e.data.type)) &&
-        nodeIds.has(e.data.source) &&
-        nodeIds.has(e.data.target),
+        activeRelationFilters.has(e.relationship) &&
+        activeProvenanceFilters.has(e.provenance) &&
+        nodeIds.has(e.source) &&
+        nodeIds.has(e.target),
     )
     // count only domain-type leaves actually excluded by collapsing (not ones
-    // already hidden by the node-type filter — "show" can't reveal those)
+    // already hidden by the kind filter — "show" can't reveal those)
     const hiddenLeafCount =
       collapseLeaves && leaves
         ? [...leaves].filter((id) => {
-            const n = graph.nodes.find((node) => node.data.id === id)
-            return !!n && n.data.type === 'domain' && !nodeIds.has(id)
+            const n = graph.nodes.find((node) => node.id === id)
+            return !!n && n.kind === 'domain' && !nodeIds.has(id)
           }).length
         : 0
     return {
       elements: [
-        ...nodes.map((n) => ({ data: { ...n.data } })),
-        ...edges.map((e) => ({ data: { ...e.data } })),
+        ...nodes.map((n) => ({ data: { ...n } })),
+        ...edges.map((e) => ({ data: { ...e } })),
       ] as ElementDefinition[],
       visibleIds: nodeIds,
       hiddenLeafCount,
@@ -599,16 +710,9 @@ function InvestigateCanvas({
         ? 'scale'
         : computeTier(nodeIds.size || 1),
     }
-  }, [graph, nodeFilters, activeEdgeFilters, showLeaves, leaves])
+  }, [graph, activeKindFilters, activeRelationFilters, activeProvenanceFilters, showLeaves, leaves])
 
   const tier = visible.tier
-
-  // Fresh capture → reset user overrides
-  useEffect(() => {
-    setEdgeFilters(null)
-    setShowLeaves(false)
-    setSelectedNode(null)
-  }, [effectiveCaptureId])
 
   // Persistent instance per capture: filter toggles diff elements in/out and
   // run an incremental layout instead of destroying the whole graph, so zoom
@@ -625,20 +729,20 @@ function InvestigateCanvas({
       {
         selector: 'node',
         style: {
-          label: (ele: any) => (labeled.has(ele.data('id')) ? ele.data('label') : ''),
-          'background-color': (ele: { data: (k: string) => any }) =>
-            palette.nodeFills[ele.data('type') as keyof typeof palette.nodeFills] ?? palette.nodeFills.host,
-          'border-color': (ele: { data: (k: string) => any }) =>
-            ele.data('alert_count') > 0
+          label: (ele: NodeSingular) => (labeled.has(ele.data('id') as string) ? ele.data('label') as string : ''),
+          'background-color': (ele: NodeSingular) => kindStyle(ele.data('kind') as GraphNodeKind, theme).fill,
+          'border-color': (ele: NodeSingular) =>
+            (ele.data('alert_count') as number) > 0
               ? '#ef4444'
-              : nodeBorderColor(ele.data('type'), theme),
-          'border-width': (ele: { data: (k: string) => any }) =>
-            ele.data('alert_count') > 0 ? 3 : 1.5,
-          color: palette.label,
+              : kindStyle(ele.data('kind') as GraphNodeKind, theme).color,
+          'border-width': (ele: NodeSingular) =>
+            (ele.data('alert_count') as number) > 0 ? 3 : 1.5,
+          shape: (ele: NodeSingular) => kindStyle(ele.data('kind') as GraphNodeKind, theme).shape,
+          color: theme === 'light' ? '#334155' : '#94a3b8',
           'font-size': 9,
           'font-family': "'JetBrains Mono Variable', ui-monospace, monospace",
-          width: (ele: any) => nodeSize(metrics.scores.get(ele.data('id')) ?? 0),
-          height: (ele: any) => nodeSize(metrics.scores.get(ele.data('id')) ?? 0),
+          width: (ele: NodeSingular) => nodeSize(metrics.scores.get(ele.data('id') as string) ?? 0),
+          height: (ele: NodeSingular) => nodeSize(metrics.scores.get(ele.data('id') as string) ?? 0),
           'min-zoomed-font-size': 9,
         },
       },
@@ -653,10 +757,14 @@ function InvestigateCanvas({
       {
         selector: 'edge',
         style: {
-          width: (ele: { data: (k: string) => number }) =>
-            Math.min(1 + Math.log2(1 + (ele.data('packets') ?? 1)), 6),
-          'line-color': (ele: { data: (k: string) => any }) =>
-            edgeColor(ele.data('type'), palette),
+          width: (ele: EdgeSingular) =>
+            Math.min(1 + Math.log2(1 + (ele.data('packets') as number ?? 1)), 6),
+          'line-color': (ele: EdgeSingular) =>
+            (ele.data('alert_ids') as string[]).length > 0
+              ? '#ef4444'
+              : RELATIONSHIP_COLORS[ele.data('relationship') as string] ?? '#94a3b8',
+          'line-style': (ele: EdgeSingular) =>
+            PROVENANCE_LINE[ele.data('provenance') as GraphProvenance] ?? 'solid',
           'target-arrow-shape': 'triangle',
           'arrow-scale': 0.7,
           'curve-style': curveStyle,
@@ -678,19 +786,17 @@ function InvestigateCanvas({
         layout: layoutForTier(visible.visibleIds.size, tier, metrics.degrees),
         ...viewportForTier(tier),
       })
+      // Node tap → v2 node id flows straight to the detail panel (no rewriting).
       cy.on('tap', 'node', (e) => {
-        setSelectedNode(e.target.data() as GraphNodeData)
+        setSelectedNodeId(e.target.id() as string)
+        setSelectedEdge(null)
       })
-      // edge tap → provenance modal (v2 lookup by pair+relationship)
+      // Edge tap → the v2 edge id IS the cytoscape id; hydrate the row from
+      // the loaded graph for the provenance panel.
       cy.on('tap', 'edge', (e) => {
-        const d = e.target.data()
-        setSelectedNode(null)
-        setSelectedEdgeId(null)
-        // v1 edge id: "src->dst:TYPE" — find the matching v2 edge
-        const match = v2Ref.current?.edges.find(
-          (x) => x.source === `host:${d.source}` && x.target === `host:${d.target}` && x.relationship === 'FLOW',
-        )
-        if (match) setSelectedEdgeId(match.id)
+        const edge = graph.edges.find((x) => x.id === e.target.id()) ?? null
+        setSelectedNodeId(null)
+        setSelectedEdge(edge)
       })
       cy.on('mouseover', 'node', (e) => e.target.addClass('highlighted'))
       cy.on('mouseout', 'node', (e) => e.target.removeClass('highlighted'))
@@ -703,24 +809,19 @@ function InvestigateCanvas({
 
       // diff: remove vanished, add new, keep positions of survivors
       const wanted = new Set(visible.elements.map((el) => el.data.id))
-      const toRemove = cy.elements().filter((el: any) => !wanted.has(el.data().id))
-      const existing = new Set(cy.elements().map((el: any) => el.data().id))
+      const toRemove = cy.elements().filter((el: NodeSingular) => !wanted.has(el.data().id))
+      const existing = new Set(cy.elements().map((el: NodeSingular) => el.data().id))
       const toAdd = visible.elements.filter((el) => !existing.has(el.data.id))
       if (toRemove.length > 0) cy.remove(toRemove)
 
-      const addedNodes = toAdd.filter((el: any) => 'source' in el.data === false && 'target' in el.data === false)
+      const addedNodes = toAdd.filter((el: ElementDefinition) => !('source' in el.data))
       if (addedNodes.length > 0) {
         cy.add(toAdd)
-        // Seed new nodes beside a connected neighbor when possible; fcose's
-        // incremental (randomize:false) path crashes on added nodes, so small
-        // deltas are positioned locally and only large deltas re-layout.
-        // Hub-adjacent nodes fan out at an angle around the hub instead of
-        // jittering on top of each other.
         const smallDelta = addedNodes.length <= 30
         if (smallDelta) {
-          const seedFan = new Map<string, number>() // hub id → next angle slot
+          const seedFan = new Map<string, number>()
           for (const el of addedNodes) {
-            const node = cy.getElementById(String(el.data.id))
+            const node = cy.getElementById(String(el.data.id) as string)
             if (node.empty() || !node.isNode()) continue
             const edge = node.connectedEdges()[0]
             if (!edge || edge.empty()) {
@@ -756,7 +857,22 @@ function InvestigateCanvas({
       }
       cy.style().fromJson(cyStyle)
     }
-  }, [visible, tier, metrics, graph, effectiveCaptureId, palette, theme, v2])
+  }, [visible, tier, metrics, graph, effectiveCaptureId, theme])
+
+  // Locate a node in the canvas: select it, then pan/zoom to its position so
+  // the search box is a real investigation tool on large graphs.
+  const focusNode = (nodeId: string) => {
+    setSelectedNodeId(nodeId)
+    setSelectedEdge(null)
+    setSearchQuery('')
+    const cy = cyRef.current
+    if (!cy) return
+    const ele = cy.getElementById(nodeId)
+    if (ele.length > 0) {
+      cy.animate({ center: { eles: ele }, zoom: { level: 2, position: ele.position() }, duration: 250 } as never)
+      ele.addClass('highlighted')
+    }
+  }
 
   // container ref may not be mounted on first effect run for a new capture
   useEffect(() => {
@@ -767,16 +883,25 @@ function InvestigateCanvas({
     }
   }, [])
 
+  const selectedNode = selectedNodeId ? graph?.nodes.find((n) => n.id === selectedNodeId) ?? null : null
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* mode-scoped stats line */}
       {graph && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
           <span>
-            {graph.stats.host_count} hosts · {graph.stats.domain_count} domains ·{' '}
-            {graph.stats.service_count} services · {graph.stats.edge_count} edges
+            {graph.stats.node_count} nodes · {graph.stats.edge_count} edges ·{' '}
+            <span className="text-danger">{graph.stats.alert_backed_edges} alert-backed</span>
           </span>
           <span className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-muted">{tier}</span>
+          <button
+            onClick={() => cyRef.current?.fit(undefined, 30)}
+            aria-label="Fit graph to view"
+            className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-muted transition hover:text-fg"
+          >
+            fit view
+          </button>
           <span className="ml-auto">click an edge for provenance · click a node for detail</span>
         </div>
       )}
@@ -784,68 +909,198 @@ function InvestigateCanvas({
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-bg">
         <div ref={containerRef} className="h-full w-full" />
 
-        {/* legend / filters */}
-        <div className="absolute left-3 top-3 space-y-1 rounded-lg bg-surface-2/90 p-3 text-xs ring-1 ring-border">
-          <div className="mb-1 font-medium text-fg-muted">Edges</div>
-          {edgeGroups.map((g) => {
-            const active = activeEdgeFilters.has(g.key)
-            return (
+        {/* left filter rail */}
+        {graph && (
+          <div className="absolute left-3 top-3 w-44 space-y-1 rounded-lg bg-surface-2/90 p-3 text-xs ring-1 ring-border">
+            {/* search: locate a node by label / id / ip and jump to it */}
+            <div className="relative mb-2">
+              <input
+                aria-label="Search graph nodes"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Find node…"
+                className="w-full rounded border border-border-strong bg-bg px-2 py-1 text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
+              />
+              {searchQuery.trim() !== '' && (
+                <div
+                  className="absolute z-30 mt-1 w-full overflow-hidden rounded border border-border-strong bg-surface-2 shadow-xl"
+                  role="listbox"
+                >
+                  {searchResults.length > 0 ? (
+                    searchResults.map((n) => (
+                      <button
+                        key={n.id}
+                        role="option"
+                        onClick={() => focusNode(n.id)}
+                        className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-surface-3"
+                      >
+                        <span className="flex-1 truncate font-mono text-fg-subtle">{n.label}</span>
+                        <span className="capitalize text-fg-muted">{n.kind}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1 text-fg-muted">no matches</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* quick filter presets */}
+            <div className="mb-2 flex flex-wrap gap-1">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p.id)}
+                  aria-pressed={activePreset === p.id}
+                  className={`rounded px-1.5 py-0.5 ring-1 transition ${
+                    activePreset === p.id
+                      ? 'bg-accent-soft text-accent ring-accent-ring'
+                      : 'text-fg-muted ring-border-strong hover:text-fg'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mb-1 font-medium text-fg-muted">Nodes</div>
+            {graph.stats.node_count > 0 && activeKindFilters.size > 0 && (
+              <div>
+                {([...activeKindFilters].sort() as GraphNodeKind[]).map((kind) => {
+                  const count = graph.nodes.filter((n) => n.kind === kind).length
+                  if (count === 0) return null
+                  const active = activeKindFilters.has(kind)
+                  return (
+                    <button
+                      key={kind}
+                      onClick={() => setKindFilters(toggleInSet(activeKindFilters, kind))}
+                      className={`flex w-full items-center gap-2 text-left transition-opacity ${
+                        active ? 'text-fg-subtle' : 'text-fg-subtle opacity-40'
+                      }`}
+                    >
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-[2px] ring-1"
+                        style={{
+                          background: kindStyle(kind, theme).fill,
+                          boxShadow: `inset 0 0 0 1px ${kindStyle(kind, theme).color}`,
+                          opacity: active ? 1 : 0.3,
+                        }}
+                      />
+                      <span className="flex-1 capitalize">{kind}</span>
+                      <span className="text-fg-subtle">{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="mb-1 mt-2 font-medium text-fg-muted">Edges</div>
+            {relationGroups.length > 0 && (
+              <div>
+                {relationGroups.map((g) => {
+                  const active = activeRelationFilters.has(g.relationship)
+                  return (
+                    <button
+                      key={g.relationship}
+                      onClick={() => setRelationFilters(toggleInSet(activeRelationFilters, g.relationship))}
+                      className={`flex w-full items-center gap-2 text-left transition-opacity ${
+                        active ? 'text-fg-subtle' : 'text-fg-subtle opacity-40'
+                      }`}
+                    >
+                      <span
+                        className="inline-block h-0.5 w-5"
+                        style={{ background: g.color, opacity: active ? 1 : 0.3 }}
+                      />
+                      <span className="flex-1">{g.label}</span>
+                      <span className="text-fg-subtle">{g.count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="mb-1 mt-2 font-medium text-fg-muted">Provenance</div>
+            {graph.edges.length > 0 && (
+              <div>
+                {(['observed', 'correlated', 'enriched'] as GraphProvenance[]).map((prov) => {
+                  const count = graph.edges.filter((e) => e.provenance === prov).length
+                  if (count === 0) return null
+                  const active = activeProvenanceFilters.has(prov)
+                  return (
+                    <button
+                      key={prov}
+                      onClick={() => setProvenanceFilters(toggleInSet(activeProvenanceFilters, prov))}
+                      className={`flex w-full items-center gap-2 text-left transition-opacity ${
+                        active ? 'text-fg-subtle' : 'text-fg-subtle opacity-40'
+                      }`}
+                    >
+                      <span className="inline-block h-2.5 w-5 border-t-2 border-fg-subtle" style={{ borderStyle: PROVENANCE_LINE[prov] }} />
+                      <span className="flex-1">{prov}</span>
+                      <span className="text-fg-subtle">{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {visible.hiddenLeafCount > 0 && (
               <button
-                key={g.key}
-                onClick={() => toggleEdgeFilter(g.key)}
-                className={`flex items-center gap-2 text-left transition-opacity ${
-                  active ? 'text-fg-subtle' : 'text-fg-subtle opacity-40'
-                }`}
+                onClick={() => setShowLeaves(true)}
+                className="mt-2 block w-full rounded border border-border-strong px-1.5 py-1 text-left text-fg-muted hover:border-fg-subtle hover:text-fg"
               >
-                <span
-                  className="inline-block h-0.5 w-5"
-                  style={{ background: g.color, opacity: active ? 1 : 0.3 }}
-                />
-                <span className="flex-1">{g.label}</span>
-                <span className="text-fg-subtle">{g.count}</span>
+                {visible.hiddenLeafCount} leaf domains hidden — show
               </button>
-            )
-          })}
-          <div className="mt-2 mb-1 font-medium text-fg-muted">Nodes</div>
-          {(
-            [
-              ['host', 'host', nodeBorderColor('host', theme)],
-              ['domain', 'domain', nodeBorderColor('domain', theme)],
-              ['service', 'service', nodeBorderColor('service', theme)],
-            ] as const
-          ).map(([type, label, ring]) => {
-            const active = type === 'host' || nodeFilters.has(type)
-            return (
-              <button
-                key={type}
-                disabled={type === 'host'}
-                onClick={() => setNodeFilters(toggleInSet(nodeFilters, type))}
-                className={`flex items-center gap-2 text-left transition-opacity ${
-                  active ? 'text-fg-subtle' : 'text-fg-subtle opacity-40'
-                }`}
-              >
-                <span
-                  className="h-3 w-3 rounded-full ring-1"
-                  style={{ boxShadow: `inset 0 0 0 1px ${ring}`, opacity: active ? 1 : 0.3 }}
-                />
-                {label}
-              </button>
-            )
-          })}
-          {visible.hiddenLeafCount > 0 && (
-            <button
-              onClick={() => setShowLeaves(true)}
-              className="mt-2 block w-full rounded border border-border-strong px-1.5 py-1 text-left text-fg-muted hover:border-fg-subtle hover:text-fg"
-            >
-              {visible.hiddenLeafCount} leaf domains hidden — show
-            </button>
-          )}
-          <div className="mt-2 border-t border-border pt-1.5 text-fg-subtle">
-            {visible.elements.length > 0
-              ? `${visible.elements.length} shown`
-              : 'nothing matches filters'}
+            )}
+            <div className="mt-2 border-t border-border pt-1.5 text-fg-subtle">
+              {visible.elements.length > 0
+                ? `${visible.elements.length} shown`
+                : 'nothing matches filters'}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* right slide-in inspector panel (node OR edge) */}
+        {(selectedNode || selectedEdge) && (
+          <div className="absolute bottom-3 right-3 top-3 z-10 flex w-80 flex-col overflow-hidden rounded-xl border border-border-strong bg-surface-2/95 shadow-xl">
+            {selectedEdge ? (
+              <>
+                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                  <div className="min-w-0 truncate font-mono text-xs text-fg-subtle">
+                    {selectedEdge.source} → {selectedEdge.target}
+                  </div>
+                  <button
+                    onClick={() => setSelectedEdge(null)}
+                    aria-label="Close inspector"
+                    className="ml-2 shrink-0 text-fg-subtle hover:text-fg-muted"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <EdgeProvenancePanel edge={selectedEdge} captureId={effectiveCaptureId!} />
+                </div>
+              </>
+            ) : (
+              selectedNode && (
+                <NodeDetailPanel
+                  nodeId={selectedNode.id}
+                  captureId={effectiveCaptureId!}
+                  onClose={() => setSelectedNodeId(null)}
+                  onBlast={(id) => {
+                    setSelectedNodeId(null)
+                    onModeChange('blast')
+                    void id
+                  }}
+                  onPath={(id) => {
+                    setSelectedNodeId(null)
+                    onModeChange('attack-path')
+                    void id
+                  }}
+                />
+              )
+            )}
+          </div>
+        )}
 
         {!graph && !isError && (
           <div
@@ -857,7 +1112,6 @@ function InvestigateCanvas({
             {analyzed.length ? (
               <div className="h-full w-full p-12" aria-hidden>
                 <div className="relative h-full w-full overflow-hidden rounded-lg">
-                  {/* scattered node placeholders across the viewport */}
                   {[
                     'left-[15%] top-[22%]',
                     'left-[68%] top-[18%]',
@@ -866,10 +1120,7 @@ function InvestigateCanvas({
                     'left-[25%] top-[68%]',
                     'left-[58%] top-[78%]',
                   ].map((pos) => (
-                    <div
-                      key={pos}
-                      className={`absolute ${pos} flex items-center gap-3`}
-                    >
+                    <div key={pos} className={`absolute ${pos} flex items-center gap-3`}>
                       <SkeletonRow className="h-10 w-10 rounded-full" />
                       <SkeletonRow className="w-24" />
                     </div>
@@ -886,65 +1137,39 @@ function InvestigateCanvas({
             <ErrorState message="Graph request failed." onRetry={() => void refetch()} />
           </div>
         )}
-
-        {/* Node detail panel (v2: hydrates from source tables + mode actions) */}
-        {selectedNode && effectiveCaptureId && (
-          <div className="absolute right-3 top-3 z-10 w-80 rounded-xl border border-border-strong bg-surface-2/95 shadow-xl">
-            <NodeDetailPanel
-              nodeId={`host:${selectedNode.id}`}
-              captureId={effectiveCaptureId}
-              onClose={() => setSelectedNode(null)}
-              onBlast={() => {
-                setSelectedNode(null)
-                onModeChange('blast')
-              }}
-              onPath={() => {
-                setSelectedNode(null)
-                onModeChange('attack-path')
-              }}
-            />
-          </div>
-        )}
       </div>
 
-      {/* Edge provenance modal (v2) */}
-      {selectedEdgeId && v2 && effectiveCaptureId && (
-        <Modal
-          title="Relationship provenance"
-          subtitle={
-            (() => {
-              const edge = v2.edges.find((e) => e.id === selectedEdgeId)
-              return edge ? `${edge.source} → ${edge.target}` : undefined
-            })()
-          }
-          onClose={() => setSelectedEdgeId(null)}
-        >
-          <div className="p-5">
-            <EdgeProvenancePanel
-              edge={v2.edges.find((e) => e.id === selectedEdgeId)!}
-              captureId={effectiveCaptureId}
-            />
-          </div>
-        </Modal>
+      {/* bottom status strip */}
+      {graph && (
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
+          <span>
+            showing {visible.visibleIds.size} of {graph.stats.total_nodes ?? graph.stats.node_count} nodes ·{' '}
+            {graph.stats.total_edges_in_capture} edges in capture
+          </span>
+          {['observed', 'correlated', 'enriched'].map((prov) => {
+            const count = graph.edges.filter((e) => e.provenance === prov).length
+            if (count === 0) return null
+            return (
+              <span key={prov} className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-block h-2.5 w-5 border-t-2 border-fg-subtle"
+                  style={{ borderStyle: PROVENANCE_LINE[prov as GraphProvenance] }}
+                />
+                {prov} {count}
+              </span>
+            )
+          })}
+          {graph.truncated && (
+            <button
+              onClick={() => setLimit((l) => Math.min(l + CANVAS_DEFAULT_LIMIT, CANVAS_HARD_LIMIT))}
+              disabled={limit >= CANVAS_HARD_LIMIT}
+              className="rounded bg-accent/10 px-2 py-0.5 font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
+            >
+              load more nodes
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
-}
-
-// tier before `visible` exists (used to decide leaf collapsing)
-function tierOf(graph: Graph, nodeFilters: Set<string>): 'detail' | 'balanced' | 'scale' {
-  const kept = graph.nodes.filter(
-    (n) => n.data.type === 'host' || !n.data.type || nodeFilters.has(n.data.type),
-  )
-  return computeTier(kept.length)
-}
-
-function toggleInSet(current: Iterable<string>, name: string): Set<string> {
-  const next = new Set(current)
-  if (next.has(name)) {
-    next.delete(name)
-  } else {
-    next.add(name)
-  }
-  return next
 }

@@ -731,6 +731,20 @@ class GraphEdgeRepository:
         self.db.commit()
         return result.rowcount or 0
 
+    def rebuild_for_capture(self, capture_id: str, capture: CaptureModel) -> list[GraphEdgeModel]:
+        """Delete existing edges and rebuild the evidence graph for a capture.
+
+        Used when case membership changes (INCLUDES edges) or for manual rebuild.
+        """
+        self.delete_for_capture(capture_id)
+        from app.services.evidence_graph import EvidenceGraphBuilder
+
+        rows = EvidenceGraphBuilder(self.db).build(capture)
+        if rows:
+            self.db.add_all(rows)
+            self.db.commit()
+        return rows
+
     def count_for_capture(self, capture_id: str) -> int:
         return int(
             self.db.scalar(

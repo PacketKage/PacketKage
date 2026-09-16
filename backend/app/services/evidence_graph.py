@@ -226,6 +226,22 @@ class _EdgeAcc:
     provenance: str = "observed"
     explanation: str | None = None
 
+    def to_dict(self) -> dict:
+        return {
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "count": self.count,
+            "packets": self.packets,
+            "bytes": self.bytes,
+            "protocol": self.protocol,
+            "port": self.port,
+            "flow_ids": self.flow_ids[: GraphCaps.MAX_FLOW_REFS],
+            "alert_ids": self.alert_ids[: GraphCaps.MAX_ALERT_REFS],
+            "packet_refs": self.packet_refs[: GraphCaps.MAX_PACKET_REFS],
+            "provenance": self.provenance,
+            "explanation": self.explanation,
+        }
+
     def observe(
         self,
         ts: float,
@@ -460,7 +476,7 @@ class EvidenceGraphBuilder:
         )
         for c in case_rows:
             if cap_id in (c.capture_ids or []):
-                e = acc(case_id(c.id), capture_id(cap_id), "INCLUDES", provenance="observed")
+                e = acc(case_id(c.id), capture_id(cap_id), "INCLUDES", provenance="correlated")
                 created = c.created_at.timestamp() if c.created_at else 0.0
                 e.observe(created)
 
@@ -674,12 +690,20 @@ def hydrate_node(
 
 
 def build_adjacency(
-    db: Session, capture_id: str, relationships: list[str] | None = None
+    db: Session,
+    capture_id: str,
+    relationships: list[str] | None = None,
+    provenance: list[str] | None = None,
 ) -> dict[str, list[tuple[str, GraphEdgeModel]]]:
-    """Adjacency list over observed/correlated edges (excludes 'enriched')."""
+    """Adjacency list over edges filtered by provenance (default: observed only)."""
     stmt = select(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id)
     if relationships:
         stmt = stmt.where(GraphEdgeModel.relationship.in_(relationships))
+    if provenance:
+        stmt = stmt.where(GraphEdgeModel.provenance.in_(provenance))
+    else:
+        # default to observed-only for investigation traversals
+        stmt = stmt.where(GraphEdgeModel.provenance == "observed")
     adj: dict[str, list[tuple[str, GraphEdgeModel]]] = defaultdict(list)
     for e in db.scalars(stmt):
         adj[e.source_id].append((e.target_id, e))
@@ -697,41 +721,48 @@ def find_attack_paths(
     max_paths: int = GraphCaps.MAX_PATHS,
     node_cap: int = GraphCaps.PATH_NODE_CAP,
 ) -> dict:
-    """Bounded bidirectional-ish BFS path search over OBSERVED edges only.
+    """Bounded BFS path search over OBSERVED edges only.
 
-    Every hop is an observed/correlated relationship; the PATH itself is an
+    Every hop is an observed relationship; the PATH itself is an
     inference and is labeled as such in the response. Strictly bounded:
     depth ≤ max_depth, nodes visited ≤ node_cap, paths ≤ max_paths.
+    Returns paths with provenance for each hop.
     """
     max_depth = min(max_depth, GraphCaps.MAX_PATH_DEPTH)
     max_paths = min(max_paths, GraphCaps.MAX_PATHS)
     node_cap = min(node_cap, GraphCaps.PATH_NODE_CAP)
 
-    adj = build_adjacency(db, capture_id)
+    adj = build_adjacency(db, capture_id, provenance=["observed"])
     if source_node not in adj or target_node not in adj:
         return {"paths": [], "visited": 0, "truncated": False, "reason": "unknown node"}
 
     # bounded BFS collecting simple paths up to max_depth
     visited_total = 0
-    paths: list[list[str]] = []
-    queue: deque[tuple[str, list[str]]] = deque([(source_node, [source_node])])
+    paths: list[dict] = []  # each path: {"nodes": [...], "hops": [{"source", "target", "relationship", "provenance"}]}
+    queue: deque[tuple[str, list[str], list[dict]]] = deque([(source_node, [source_node], [])])
     seen_depth: dict[str, int] = {source_node: 0}
     truncated = False
 
     while queue:
-        node, path = queue.popleft()
+        node, path, hops = queue.popleft()
         visited_total += 1
         if visited_total > node_cap:
             truncated = True
             break
         if len(path) - 1 >= max_depth:
             continue
-        for neighbor, _edge in adj.get(node, []):
+        for neighbor, edge in adj.get(node, []):
             if neighbor in path:  # simple paths only
                 continue
             new_path = path + [neighbor]
+            new_hops = hops + [{
+                "source": edge.source_id,
+                "target": edge.target_id,
+                "relationship": edge.relationship,
+                "provenance": edge.provenance,
+            }]
             if neighbor == target_node:
-                paths.append(new_path)
+                paths.append({"nodes": new_path, "hops": new_hops, "length": len(new_path) - 1})
                 if len(paths) >= max_paths:
                     return {"paths": paths, "visited": visited_total, "truncated": truncated}
                 continue
@@ -742,7 +773,7 @@ def find_attack_paths(
                     visited_total + len(queue) < node_cap * 2
                 ):
                     seen_depth[neighbor] = len(new_path) - 1
-                    queue.append((neighbor, new_path))
+                    queue.append((neighbor, new_path, new_hops))
 
     return {"paths": paths[:max_paths], "visited": visited_total, "truncated": truncated}
 
@@ -757,21 +788,21 @@ def blast_radius(
 ) -> dict:
     """BFS from a node, depth ≤ MAX_BLAST_DEPTH, node counts strictly capped.
 
+    Traverses ONLY observed relationships — no correlated/enriched edges.
     Returns the reachable subgraph (node ids per ring + edges) plus a
-    summary of what an attacker starting at that node could touch —
-    computed ONLY from observed relationships.
+    summary of what an attacker starting at that node could touch.
     """
     depth = min(depth, GraphCaps.MAX_BLAST_DEPTH)
     node_cap = min(node_cap, GraphCaps.BLAST_NODE_CAP)
     hard_cap = min(hard_cap, GraphCaps.BLAST_HARD_NODE_CAP)
 
-    adj = build_adjacency(db, capture_id)
+    adj = build_adjacency(db, capture_id, provenance=["observed"])
     if start_node not in adj:
         return {"nodes": [], "edges": [], "rings": {}, "truncated": False, "reason": "unknown node"}
 
     ring: dict[str, int] = {start_node: 0}
     rings: dict[int, list[str]] = defaultdict(list)
-    edges_by_key: dict[tuple[str, str], GraphEdgeModel] = {}
+    edges_by_key: dict[tuple[str, str, str], GraphEdgeModel] = {}
     queue: deque[str] = deque([start_node])
     truncated = False
 

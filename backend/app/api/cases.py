@@ -10,6 +10,7 @@ from app.repositories import (
     AlertRepository,
     CaptureRepository,
     CaseRepository,
+    GraphEdgeRepository,
     TimelineRepository,
 )
 from app.schemas.api import (
@@ -20,6 +21,7 @@ from app.schemas.api import (
     CaseOut,
     TimelineEventOut,
 )
+from app.services.evidence_graph import EvidenceGraphBuilder
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -101,15 +103,20 @@ def add_capture_to_case(case_id: str, body: CaseCaptureBody, db: Session = Depen
     if capture is None:
         raise HTTPException(404, "Capture not found")
     CaseRepository(db).add_capture(case, capture.id)
+    # Rebuild evidence graph for this capture to add INCLUDES edge
+    GraphEdgeRepository(db).rebuild_for_capture(capture.id, capture)
     return _case_detail(db, case)
 
 
 @router.delete("/{case_id}/captures/{capture_id}", response_model=CaseDetailOut)
 def remove_capture_from_case(case_id: str, capture_id: str, db: Session = Depends(get_db)):
     case = _case_or_404(db, case_id)
-    if db.get(CaptureModel, capture_id) is None:
+    capture = db.get(CaptureModel, capture_id)
+    if capture is None:
         raise HTTPException(404, "Capture not found")
     CaseRepository(db).remove_capture(case, capture_id)
+    # Rebuild evidence graph for this capture to remove INCLUDES edge
+    GraphEdgeRepository(db).rebuild_for_capture(capture.id, capture)
     return _case_detail(db, case)
 
 

@@ -483,6 +483,7 @@ export interface GraphV2 {
     edge_count: number
     total_edges_in_capture: number
     node_count: number
+    total_nodes: number
     relationships: string[]
     provenance_classes: GraphProvenance[]
     alert_backed_edges: number

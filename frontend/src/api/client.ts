@@ -282,6 +282,7 @@ export const api = {
       minAlerts?: number
       nodeId?: string
       limit?: number
+      offset?: number
     },
   ) => {
     const params = new URLSearchParams({ capture_id: captureId })
@@ -293,6 +294,7 @@ export const api = {
     if (filters?.minAlerts) params.set('min_alerts', String(filters.minAlerts))
     if (filters?.nodeId) params.set('node_id', filters.nodeId)
     if (filters?.limit) params.set('limit', String(filters.limit))
+    if (filters?.offset) params.set('offset', String(filters.offset))
     return request<GraphV2>(`/graph/v2?${params}`)
   },
 

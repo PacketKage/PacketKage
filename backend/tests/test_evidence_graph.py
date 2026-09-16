@@ -254,6 +254,8 @@ def test_v2_node_limit_and_truncated_flag(client):
     assert capped["truncated"] is True
     assert len(capped["nodes"]) <= 50 + 10  # cap + focus expansion slack
     assert capped["stats"]["total_edges_in_capture"] >= full["stats"]["edge_count"]
+    assert capped["stats"]["total_nodes"] == full["stats"]["total_nodes"]
+    assert capped["stats"]["total_nodes"] > capped["stats"]["node_count"]
     assert len(capped["nodes"]) < len(full["nodes"])
 
     # hard limit enforced by validation
@@ -504,7 +506,7 @@ def test_v2_case_capture_includes_edge_does_not_crash(client, app_env):
     edge = includes[0]
     assert edge["source"] == f"case:{case['id']}"
     assert edge["target"] == f"capture:{capture_id}"
-    assert edge["provenance"] == "observed"
+    assert edge["provenance"] == "correlated"
 
 
 # ---------------- MITRE mapping integrity ----------------
