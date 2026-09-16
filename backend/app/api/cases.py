@@ -22,7 +22,6 @@ from app.schemas.api import (
     TimelineEventOut,
 )
 
-
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
