@@ -154,7 +154,7 @@ podman-compose down     # Podman
 ### Requirements (manual setup)
 
 * Python 3.12+
-* Node.js 18+
+* Node.js 24.x
 * npm
 
 ### Backend
@@ -380,4 +380,3 @@ The core analysis pipeline, flow reconstruction, protocol analysis, behavioral d
 PacketKage is an evolving project. Contributions, ideas, bug reports, and improvements are welcome.
 
 If you have an idea that could make network traffic easier to understand or investigate, feel free to open an issue or submit a pull request.
-
