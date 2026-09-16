@@ -21,7 +21,7 @@ from app.schemas.api import (
     CaseOut,
     TimelineEventOut,
 )
-from app.services.evidence_graph import EvidenceGraphBuilder
+
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
