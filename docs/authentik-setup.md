@@ -49,8 +49,9 @@ Notes:
 
 For local development there is a stdlib-only helper that automates all of the
 above against the bundled Authentik - it fills `.env` secrets, starts the
-Authentik containers (never the `packetkage` one), creates the groups, provider
-and application over the Authentik API, and writes `backend/data/setup.json`:
+Authentik containers (never the `packetkage` one), creates the groups, the
+`groups` scope mapping, the provider and the application over the Authentik API,
+and writes `backend/data/setup.json` (including the `groups` scope):
 
 ```bash
 python3 scripts/packetkage-setup.py                   # defaults to the Vite dev server
@@ -124,8 +125,16 @@ In the Authentik admin UI:
    * Client type: **Confidential**
    * Redirect URIs: `http://localhost:8000/api/auth/callback`
      (must match `PACKETKAGE_OIDC_REDIRECT_URI` exactly - scheme, host, port, path)
-   * Scopes: ensure `openid`, `profile`, `email` are selected (add the
-     `groups` scope / an "OpenID `groups`" mapping so the claim is emitted).
+   * Scopes: ensure `openid`, `profile`, `email` **and `groups`** are selected.
+     Authentik ships no `groups` mapping, so create one first under
+     **Customization → Property Mappings → Create → Scope Mapping**:
+     * Name: `OpenID 'groups'`, Scope name: `groups`
+     * Expression:
+       ```python
+       return {"groups": [group.name for group in request.user.ak_groups.all()]}
+       ```
+     Without this mapping the ID token carries no group memberships and every
+     login is refused with "Access denied" (403), even for `akadmin`.
    * Advanced protocol settings → **Subject mode**: *Based on the User's
      username* is fine.
 
@@ -212,7 +221,7 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
 | `503 Authentication is not configured` | `PACKETKAGE_OIDC_ISSUER` is unset/empty in the running container. Restart after setting it. |
 | `Invalid issuer` after Authentik login | The issuer the backend fetches differs from the token `iss`. Ensure backend and browser use the identical issuer URL (`authentik` alias + `/etc/hosts`, or a real public hostname). |
 | `redirect_uri mismatch` | `PACKETKAGE_OIDC_REDIRECT_URI` must match a registered Redirect URI on the provider exactly. |
-| Login succeeds but the app shows "Access denied" | The user is not in `packetkage-admin` or `packetkage-analyst`. Add them to a group in Authentik. |
+| Login succeeds but the app shows "Access denied" | Either the user is not in `packetkage-admin` / `packetkage-analyst`, or the provider is missing the `groups` scope mapping (so no `groups` claim is emitted). Add the mapping and ensure `groups` is in `PACKETKAGE_OIDC_SCOPE` (default `openid profile email groups`), then restart. |
 | No Admin link / delete buttons | Working as intended for analysts - those are admin-only. |
 | Cookie not stored | Serving over HTTPS without `Secure`, or the reverse proxy rewrites the Host. Check `PACKETKAGE_PUBLIC_URL` and cookie flags in DevTools. |
 | `nonce` / `expired token` errors | Clock skew between hosts. Keep the containers/hosts time-synced (NTP). |

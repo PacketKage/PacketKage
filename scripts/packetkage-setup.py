@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-shot local dev bootstrap for PacketKage + bundled Authentik.
 
-Automates the boring, error-prone parts of the "Option A — bundled Authentik"
+Automates the boring, error-prone parts of the "Option A - bundled Authentik"
 walkthrough:
 
 1. writes `.env` (copy from `.env.example`) and fills the three required
@@ -9,9 +9,10 @@ walkthrough:
 2. starts only the Authentik services (postgresql/redis/server/worker) so it
    never collides with a native `uvicorn` on :8000;
 3. waits until Authentik is healthy;
-4. creates the two groups, the OAuth2/OpenID provider, and the application via
-   Authentik's REST API (using the bootstrap token), then reads back the
-   client id/secret;
+4. creates the two groups, a `groups` scope mapping (Authentik ships none by
+   default, so without it the ID token carries no group memberships), the
+   OAuth2/OpenID provider, and the application via Authentik's REST API (using
+   the bootstrap token), then reads back the client id/secret;
 5. writes `backend/data/setup.json` so PacketKage starts *already configured*
    (no wizard typing), and prints what to run next.
 
@@ -69,6 +70,18 @@ APP_NAME = "PacketKage"
 APP_SLUG = "packetkage"
 AUTH_FLOW_SLUG = "default-provider-authorization-implicit-consent"
 INVALIDATION_FLOW_SLUG = "default-provider-invalidation-flow"
+
+# Authentik exposes no `groups` scope mapping out of the box, and only returns
+# claims for scopes the client actually requests. PacketKage therefore needs
+# both halves: a scope mapping that emits the claim, and `groups` in the scope.
+GROUPS_SCOPE_NAME = "groups"
+GROUPS_MAPPING_NAME = "PacketKage: OpenID 'groups'"
+GROUPS_MAPPING_EXPRESSION = (
+    "return {\n"
+    '    "groups": [group.name for group in request.user.ak_groups.all()],\n'
+    "}\n"
+)
+DEFAULT_OIDC_SCOPE = "openid profile email groups"
 
 
 # --------------------------------------------------------------------------- #
@@ -172,6 +185,10 @@ def prepare_env(args: argparse.Namespace) -> dict[str, str]:
             ).strip() or random_secret(18)
         updates["AUTHENTIK_BOOTSTRAP_PASSWORD"] = password
         ok("set AUTHENTIK_BOOTSTRAP_PASSWORD")
+
+    if "groups" not in (current.get("PACKETKAGE_OIDC_SCOPE") or "").split():
+        updates["PACKETKAGE_OIDC_SCOPE"] = DEFAULT_OIDC_SCOPE
+        ok(f"set PACKETKAGE_OIDC_SCOPE={DEFAULT_OIDC_SCOPE}")
 
     if args.dry_run:
         for key in updates:
@@ -364,7 +381,7 @@ class Authentik:
         cert = self.first("/api/v3/crypto/certificatekeypairs/?has_key=true")
         return cert["pk"] if cert else None
 
-    def scope_mappings(self) -> list[str]:
+    def default_scope_mappings(self) -> list[str]:
         body = self.call("GET", "/api/v3/propertymappings/all/?page_size=1000")
         wanted = {"openid", "profile", "email"}
         pks: list[str] = []
@@ -373,27 +390,64 @@ class Authentik:
             if match and match.group(1).lower() in wanted:
                 pks.append(mapping["pk"])
         if not pks:
-            warn("no default scope mappings found; tokens may lack the groups claim.")
+            warn("no default scope mappings found; tokens may lack standard claims.")
         return pks
 
+    def ensure_groups_mapping(self) -> str:
+        """Return the pk of a `groups` scope mapping, creating it if needed.
+
+        Authentik does not ship one, so a provider attached only to the default
+        mappings emits no group memberships and every login is refused.
+        """
+        existing = self.first(
+            "/api/v3/propertymappings/provider/scope/"
+            f"?scope_name={urllib.parse.quote(GROUPS_SCOPE_NAME)}"
+        )
+        if existing:
+            return existing["pk"]
+        created = self.call(
+            "POST",
+            "/api/v3/propertymappings/provider/scope/",
+            {
+                "name": GROUPS_MAPPING_NAME,
+                "scope_name": GROUPS_SCOPE_NAME,
+                "description": (
+                    "Emit the user's Authentik groups as a claim so PacketKage "
+                    "can map them to roles."
+                ),
+                "expression": GROUPS_MAPPING_EXPRESSION,
+            },
+        )
+        ok(f"created scope mapping {GROUPS_MAPPING_NAME!r}")
+        return created["pk"]
+
     def ensure_provider(self, redirect_uri: str) -> dict:
+        mappings = self.default_scope_mappings() + [self.ensure_groups_mapping()]
         existing = self.first(
             f"/api/v3/providers/oauth2/?name={urllib.parse.quote(PROVIDER_NAME)}"
         )
-        desired_redirect = [{"matching_mode": "strict", "url": redirect_uri}]
         if existing:
-            current = {
+            patch: dict = {}
+            current_redirects = {
                 (entry or {}).get("url")
                 for entry in (existing.get("redirect_uris") or [])
             }
-            if redirect_uri not in current:
-                merged = list(existing.get("redirect_uris") or []) + desired_redirect
-                self.call(
-                    "PATCH",
-                    f"/api/v3/providers/oauth2/{existing['pk']}/",
-                    {"redirect_uris": merged},
-                )
+            if redirect_uri not in current_redirects:
+                patch["redirect_uris"] = list(existing.get("redirect_uris") or []) + [
+                    {"matching_mode": "strict", "url": redirect_uri}
+                ]
                 ok(f"added redirect URI to existing provider '{PROVIDER_NAME}'")
+            attached = list(existing.get("property_mappings") or [])
+            missing = [pk for pk in mappings if pk not in attached]
+            if missing:
+                patch["property_mappings"] = attached + missing
+                ok(f"attached {len(missing)} scope mapping(s) to '{PROVIDER_NAME}'")
+            if not existing.get("include_claims_in_id_token"):
+                patch["include_claims_in_id_token"] = True
+            if patch:
+                self.call(
+                    "PATCH", f"/api/v3/providers/oauth2/{existing['pk']}/", patch
+                )
             else:
                 say(f"  provider '{PROVIDER_NAME}' already exists")
             return existing
@@ -403,9 +457,10 @@ class Authentik:
             "authorization_flow": self.authorization_flow(),
             "invalidation_flow": self.invalidation_flow(),
             "client_type": "confidential",
-            "redirect_uris": desired_redirect,
+            "redirect_uris": [{"matching_mode": "strict", "url": redirect_uri}],
             "sub_mode": "user_username",
-            "property_mappings": self.scope_mappings(),
+            "include_claims_in_id_token": True,
+            "property_mappings": mappings,
         }
         signing_key = self.signing_key()
         if signing_key:
@@ -573,6 +628,8 @@ def main() -> None:
         "oidc_client_id": credentials["client_id"],
         "oidc_client_secret": credentials["client_secret"],
         "oidc_redirect_uri": redirect_uri,
+        "oidc_scope": env.get("PACKETKAGE_OIDC_SCOPE") or DEFAULT_OIDC_SCOPE,
+        "oidc_groups_claim": env.get("PACKETKAGE_OIDC_GROUPS_CLAIM") or "groups",
         "public_url": public_url,
         "admin_group": GROUP_ADMIN,
         "analyst_group": GROUP_ANALYST,

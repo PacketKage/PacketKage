@@ -167,7 +167,7 @@ It will ask you to enter the `akadmin` password (press Enter on the prompt to au
 
 1. copies `.env.example` → `.env` and fills the required secrets;
 2. starts the bundled Authentik stack (postgres, redis, server, worker) and waits until it is **healthy** - the first boot runs database migrations, so this step can take a few minutes;
-3. creates the `packetkage-admin` and `packetkage-analyst` groups, the `packetkage` OAuth2/OpenID provider and the application via the Authentik API, then adds `akadmin` to both groups;
+3. creates the `packetkage-admin` and `packetkage-analyst` groups, the `groups` scope mapping, the `packetkage` OAuth2/OpenID provider and the application via the Authentik API, then adds `akadmin` to both groups;
 4. writes the backend configuration to `backend/data/setup.json` (`0600`), so PacketKage starts **already configured**.
 
 The script is standard-library only and safe to re-run. `--dry-run` previews every action without changing anything.
@@ -175,18 +175,14 @@ The script is standard-library only and safe to re-run. `--dry-run` previews eve
 ### Backend
 
 ```bash
-
 cd backend
+python3 -m venv .venv
+source .venv/bin/activate
 
 pip install -r requirements.txt        # runtime
 pip install -r requirements-dev.txt    # tests/lint
 
-python3 -m venv .venv
-
-source .venv/bin/activate
-
 python -m uvicorn app.main:app --reload --port 8000
-
 ```
 
 > **Linux - enable live capture (one-time):** live sniffing needs `CAP_NET_RAW`/`CAP_NET_ADMIN`. Grant them to the venv interpreter instead of running the backend as root:
@@ -210,9 +206,8 @@ Interactive API documentation:
 Open another terminal:
 
 ```bash
-
 cd frontend
-
+npm install
 npm run dev
 ```
 
