@@ -2,7 +2,7 @@
   <img src="assets/Logo.png" alt="PacketKage" width="480" />
 </p>
 
-[![CI](https://github.com/besafewithsamy/PacketKage/actions/workflows/ci.yml/badge.svg)](https://github.com/besafewithsamy/PacketKage/actions/workflows/ci.yml)  
+[![CI](https://github.com/PacketKage/PacketKage/actions/workflows/ci.yml/badge.svg)](https://github.com/PacketKage/PacketKage/actions/workflows/ci.yml)  
 
 <img src="https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white"/>  <img src="https://img.shields.io/badge/Python-FFD43B?style=for-the-badge&logo=python&logoColor=blue" /> <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" /> <img src="https://img.shields.io/badge/fastapi-109989?style=for-the-badge&logo=FASTAPI&logoColor=white" />
 
@@ -161,7 +161,7 @@ podman-compose down     # Podman
 
 ```bash
 
-cd PacketKage/backend
+cd backend
 
 source .venv/bin/activate
 
@@ -191,7 +191,7 @@ Open another terminal:
 
 ```bash
 
-cd PacketKage/frontend
+cd frontend
 
 npm run dev
 ```
@@ -412,7 +412,7 @@ PacketKage/
 
 The project is covered by three test layers — backend pytest, frontend vitest, and end-to-end Playwright (the first two run in GitHub Actions CI, E2E runs locally):
 
-**Backend**  169 integration tests (pytest) over the full analysis pipeline, including the evidence graph, retry logic, and rule suites:
+**Backend**  219 integration tests (pytest) over the full analysis pipeline — detection rules, the evidence graph, retry logic, and the OIDC/authentication stack (a fake OIDC provider exercises the real Authorization-Code + PKCE flow):
 
 ```bash
 cd backend
