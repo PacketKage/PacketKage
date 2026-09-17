@@ -1,4 +1,5 @@
 """Jobs endpoints: status polling + SSE progress stream."""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,9 +35,7 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{job_id}/events")
-async def job_events(
-    job_id: str, poll_interval: float = Query(default=0.5, ge=0.1, le=30)
-):
+async def job_events(job_id: str, poll_interval: float = Query(default=0.5, ge=0.1, le=30)):
     """SSE stream of job progress until terminal state.
 
     Each event is a JSON JobOut snapshot; stream closes after the terminal

@@ -1,4 +1,5 @@
 """Alert endpoints: list, detail, acknowledge."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -62,6 +63,7 @@ def acknowledge_alert(alert_id: str, body: AckBody, db: Session = Depends(get_db
 
 class TriageBody(BaseModel):
     """Partial triage update — only provided fields change."""
+
     acknowledged: bool | None = None
     tags: list[str] | None = None
     note: str | None = None

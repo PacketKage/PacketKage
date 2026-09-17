@@ -14,6 +14,7 @@ Lifecycle:
 No privileges required to *list* interfaces; actually sniffing needs root
 (or capabilities) and surfaces a clean error message when it fails.
 """
+
 from __future__ import annotations
 
 import threading
@@ -57,7 +58,9 @@ class LiveCaptureManager:
         # count=0 means "no limit" in scapy; a positive count auto-stops the
         # sniffer once reached, enforcing the packet cap natively.
         return AsyncSniffer(
-            iface=interface, filter=bpf, store=True,
+            iface=interface,
+            filter=bpf,
+            store=True,
             count=max_packets if max_packets and max_packets > 0 else 0,
         )
 
@@ -111,9 +114,7 @@ class LiveCaptureManager:
             return 0
         # scapy 2.7.0 AsyncSniffer counts in `.count`; fall back to the
         # recorded results list for custom/fake sniffers that don't.
-        return int(getattr(sniffer, "count", 0)) or len(
-            getattr(sniffer, "results", None) or []
-        )
+        return int(getattr(sniffer, "count", 0)) or len(getattr(sniffer, "results", None) or [])
 
     # ---------------- lifecycle ----------------
 
@@ -148,9 +149,7 @@ class LiveCaptureManager:
                     f"A live capture is already running on {self.state.interface} — stop it first"
                 )
             if interface not in self.interfaces():
-                raise LiveCaptureError(
-                    f"Interface {interface!r} not found on this system"
-                )
+                raise LiveCaptureError(f"Interface {interface!r} not found on this system")
 
             sniffer = self._sniffer_factory(interface, bpf, max_packets)
             try:
@@ -283,9 +282,7 @@ class LiveCaptureManager:
         db = SessionLocal()
         try:
             repo = CaptureRepository(db)
-            capture = repo.create(
-                filename=filename, source="live", size_bytes=dest.stat().st_size
-            )
+            capture = repo.create(filename=filename, source="live", size_bytes=dest.stat().st_size)
             capture = repo.update(capture, stored_path=str(dest))
             cap_id, stored = capture.id, str(dest)
             job_manager.submit(cap_id, _create_and_get_job(db, cap_id).id, stored, None)

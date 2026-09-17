@@ -1,4 +1,5 @@
 """Capture endpoints: upload, list, detail, analyze."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import require_admin
 from app.core.config import settings
 from app.core.database import get_db
 from app.parsers import ParserError, registry, resolve_parser
@@ -153,8 +155,15 @@ def analyze_capture(
 
 
 @router.delete("/{capture_id}")
-def delete_capture(capture_id: str, db: Session = Depends(get_db)):
+def delete_capture(
+    capture_id: str,
+    admin: None = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     """Delete a capture, its stored PCAP and every derived analysis row.
+
+    Administration-only: permanently removes evidence and its backing file,
+    so only ``packetkage-admin`` members may call this (403 for analysts).
 
     Blocked with 409 while an analysis is queued/running — the job thread
     would otherwise re-insert rows for a capture that no longer exists

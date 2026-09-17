@@ -7,6 +7,7 @@ NOT raw packets. Events answer "what happened" and each links to evidence
 Graph: Cytoscape-shaped elements (nodes/edges) describing network relationships:
 hosts, domains, services; DNS / TCP / TLS / HTTP edges.
 """
+
 from __future__ import annotations
 
 from app.core.models import ParsedCapture
@@ -54,8 +55,12 @@ def build_timeline(
                     "destination_ip": t["client_ip"],
                     "protocol": "DNS",
                     "domain": name,
-                    "detail": {"rcode": t.get("rcode"), "answers": t.get("response_ips", []),
-                               "latency": t.get("latency"), "txid": t.get("transaction_id")},
+                    "detail": {
+                        "rcode": t.get("rcode"),
+                        "answers": t.get("response_ips", []),
+                        "latency": t.get("latency"),
+                        "txid": t.get("transaction_id"),
+                    },
                 }
             )
 
@@ -91,7 +96,9 @@ def build_timeline(
                     "destination_port": f["destination_port"],
                     "protocol": label_proto,
                     "detail": {
-                        "bytes": f["bytes"], "packets": f["packets"], "duration": f["duration"],
+                        "bytes": f["bytes"],
+                        "packets": f["packets"],
+                        "duration": f["duration"],
                     },
                     "related_flow_id": fid,
                 }
@@ -99,7 +106,9 @@ def build_timeline(
             continue
 
         ev_type = "tcp_connect"
-        label = f"Connection: {f['source_ip']}:{f['source_port']} → {f['destination_ip']}:{f['destination_port']}"
+        label = (
+            f"Connection: {f['source_ip']}:{f['source_port']} → {f['destination_ip']}:{f['destination_port']}"
+        )
         severity = None
         if f.get("tcp_state") == "reset":
             ev_type = "tcp_reset"
@@ -155,8 +164,11 @@ def build_timeline(
                 "domain": t.get("host"),
                 "severity": "high" if (t.get("status_code") or 0) >= 400 else None,
                 "detail": {
-                    "method": t.get("method"), "host": t.get("host"), "path": t.get("path"),
-                    "status": t.get("status_code"), "user_agent": t.get("user_agent"),
+                    "method": t.get("method"),
+                    "host": t.get("host"),
+                    "path": t.get("path"),
+                    "status": t.get("status_code"),
+                    "user_agent": t.get("user_agent"),
                 },
                 "packet_ref": t.get("packet_ref"),
             }
@@ -190,8 +202,11 @@ def build_timeline(
                 "destination_port": a.get("destination_port"),
                 "protocol": None,
                 "severity": a["severity"],
-                "detail": {"rule": a["rule_name"], "score": a["score"],
-                           "reasons": [r["reason"] for r in a["reasons"]]},
+                "detail": {
+                    "rule": a["rule_name"],
+                    "score": a["score"],
+                    "reasons": [r["reason"] for r in a["reasons"]],
+                },
                 "related_alert_id": (alert_id_map or {}).get(id(a), a.get("id")),
             }
         )
@@ -221,8 +236,18 @@ def build_graph(
         key = (src, dst, etype)
         e = edges.get(key)
         if e is None:
-            e = {"data": {"id": f"{src}->{dst}:{etype}", "source": src, "target": dst,
-                          "type": etype, "packets": 0, "bytes": 0, "count": 0, **props}}
+            e = {
+                "data": {
+                    "id": f"{src}->{dst}:{etype}",
+                    "source": src,
+                    "target": dst,
+                    "type": etype,
+                    "packets": 0,
+                    "bytes": 0,
+                    "count": 0,
+                    **props,
+                }
+            }
             edges[key] = e
         e["data"]["count"] += 1
 
@@ -230,7 +255,9 @@ def build_graph(
     host_by_ip = {h["ip"]: h for h in host_dicts}
     for ip, h in host_by_ip.items():
         add_node(
-            ip, "host", ip,
+            ip,
+            "host",
+            ip,
             role=h.get("role"),
             hostname=h.get("hostname"),
             internal=h.get("is_internal", False),
@@ -242,16 +269,25 @@ def build_graph(
     # flow edges (host <-> host)
     for f in flows:
         add_node(f["source_ip"], "host", f["source_ip"], internal=is_private_ip(f["source_ip"]))
-        add_node(f["destination_ip"], "host", f["destination_ip"],
-                 internal=is_private_ip(f["destination_ip"]))
+        add_node(
+            f["destination_ip"], "host", f["destination_ip"], internal=is_private_ip(f["destination_ip"])
+        )
         etype = f.get("application_protocol") or f["transport_protocol"]
         key = (f["source_ip"], f["destination_ip"], etype)
         e = edges.get(key)
         if e is None:
-            e = {"data": {"id": f"{f['source_ip']}->{f['destination_ip']}:{etype}",
-                          "source": f["source_ip"], "target": f["destination_ip"],
-                          "type": etype, "packets": 0, "bytes": 0, "count": 0,
-                          "flow_ids": []}}
+            e = {
+                "data": {
+                    "id": f"{f['source_ip']}->{f['destination_ip']}:{etype}",
+                    "source": f["source_ip"],
+                    "target": f["destination_ip"],
+                    "type": etype,
+                    "packets": 0,
+                    "bytes": 0,
+                    "count": 0,
+                    "flow_ids": [],
+                }
+            }
             edges[key] = e
         e["data"]["packets"] += f["packets"]
         e["data"]["bytes"] += f["bytes"]
@@ -285,8 +321,14 @@ def build_graph(
     for ip, h in host_by_ip.items():
         for svc in (h.get("services") or [])[:15]:  # cap to avoid clutter
             port_id = f"{ip}:{svc['port']}"
-            add_node(port_id, "service", f"{svc['service']}/{svc['port']}", port=svc["port"],
-                     service=svc["service"], host=ip)
+            add_node(
+                port_id,
+                "service",
+                f"{svc['service']}/{svc['port']}",
+                port=svc["port"],
+                service=svc["service"],
+                host=ip,
+            )
             add_edge(ip, port_id, "EXPOSES")
 
     return {

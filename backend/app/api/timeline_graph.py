@@ -1,4 +1,5 @@
 """Timeline + Graph endpoints (Module C/E/F)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -22,11 +23,11 @@ router = APIRouter(prefix="/api", tags=["timeline-graph"])
 @router.get("/timeline", response_model=Page)
 def get_timeline(
     capture_id: str,
-    host: str | None = None,        # ip or domain substring
+    host: str | None = None,  # ip or domain substring
     protocol: str | None = None,
     event_type: str | None = None,
     severity: str | None = None,
-    after: float | None = None,     # epoch seconds
+    after: float | None = None,  # epoch seconds
     before: float | None = None,
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -61,23 +62,31 @@ def get_graph(capture_id: str, db: Session = Depends(get_db)):
     flow_models = FlowRepository(db).list_for_capture(capture_id)
     dns_txns = [
         {
-            "client_ip": t.client_ip, "server_ip": t.server_ip,
-            "query_name": t.query_name, "response_ips": t.response_ips or [],
+            "client_ip": t.client_ip,
+            "server_ip": t.server_ip,
+            "query_name": t.query_name,
+            "response_ips": t.response_ips or [],
             "timestamp": t.timestamp,
         }
         for t in DNSRepository(db).list_for_capture(capture_id)
     ]
     tls_sessions = [
         {
-            "client_ip": s.client_ip, "server_ip": s.server_ip,
-            "server_port": s.server_port, "sni": s.sni, "first_seen": s.first_seen,
+            "client_ip": s.client_ip,
+            "server_ip": s.server_ip,
+            "server_port": s.server_port,
+            "sni": s.sni,
+            "first_seen": s.first_seen,
         }
         for s in TLSRepository(db).list_for_capture(capture_id)
     ]
     host_dicts = [
         {
-            "ip": h.ip, "role": h.role, "hostname": h.hostname,
-            "is_internal": bool(h.is_internal), "bytes_sent": h.bytes_sent,
+            "ip": h.ip,
+            "role": h.role,
+            "hostname": h.hostname,
+            "is_internal": bool(h.is_internal),
+            "bytes_sent": h.bytes_sent,
             "bytes_received": h.bytes_received,
             "services": h.services or [],
             "behavior_summary": h.behavior_summary or {},
@@ -88,12 +97,19 @@ def get_graph(capture_id: str, db: Session = Depends(get_db)):
     # rebuild flow dicts for the graph builder, with REAL persisted ids
     flows = [
         {
-            "id": f.id, "source_ip": f.source_ip, "destination_ip": f.destination_ip,
-            "source_port": f.source_port, "destination_port": f.destination_port,
+            "id": f.id,
+            "source_ip": f.source_ip,
+            "destination_ip": f.destination_ip,
+            "source_port": f.source_port,
+            "destination_port": f.destination_port,
             "transport_protocol": f.transport_protocol,
             "application_protocol": f.application_protocol,
-            "packets": f.packets, "bytes": f.bytes, "duration": f.duration,
-            "tcp_state": f.tcp_state, "failed": bool(f.failed), "resets": f.resets,
+            "packets": f.packets,
+            "bytes": f.bytes,
+            "duration": f.duration,
+            "tcp_state": f.tcp_state,
+            "failed": bool(f.failed),
+            "resets": f.resets,
         }
         for f in flow_models
     ]

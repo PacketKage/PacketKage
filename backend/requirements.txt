@@ -3,9 +3,11 @@ annotated-types==0.8.0
 anyio==4.15.1
 certifi==2026.7.22
 click==8.5.0
+cryptography==50.0.1
 fastapi==0.141.1
 greenlet==3.5.5
 h11==0.16.0
+httpx==0.28.1
 idna==3.19
 pydantic==2.13.5
 python-multipart==0.0.32

@@ -1,4 +1,5 @@
 """Step 6 tests: network engineering mode metrics."""
+
 from __future__ import annotations
 
 from tests.conftest import TESTDATA

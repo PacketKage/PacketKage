@@ -4,6 +4,7 @@ Profile shape (Module H):
     192.168.1.25  →  role: "Web server", services: 22/SSH 80/HTTP 443/HTTPS,
                      bytes in/out, protocols, contacted peers, hostname (via DNS PTR/CNAME/SNI).
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -13,11 +14,32 @@ from app.services.flow_builder import is_private_ip
 
 # service inference by port
 PORT_SERVICES = {
-    22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS", 80: "HTTP", 110: "POP3",
-    123: "NTP", 143: "IMAP", 389: "LDAP", 443: "HTTPS", 445: "SMB", 465: "SMTPS",
-    587: "SMTP", 993: "IMAPS", 995: "POP3S", 1433: "MSSQL", 1521: "OracleDB",
-    3306: "MySQL", 3389: "RDP", 4444: "Metasploit", 5432: "PostgreSQL",
-    5900: "VNC", 6379: "Redis", 8080: "HTTP-alt", 8443: "HTTPS-alt", 25565: "Minecraft",
+    22: "SSH",
+    23: "Telnet",
+    25: "SMTP",
+    53: "DNS",
+    80: "HTTP",
+    110: "POP3",
+    123: "NTP",
+    143: "IMAP",
+    389: "LDAP",
+    443: "HTTPS",
+    445: "SMB",
+    465: "SMTPS",
+    587: "SMTP",
+    993: "IMAPS",
+    995: "POP3S",
+    1433: "MSSQL",
+    1521: "OracleDB",
+    3306: "MySQL",
+    3389: "RDP",
+    4444: "Metasploit",
+    5432: "PostgreSQL",
+    5900: "VNC",
+    6379: "Redis",
+    8080: "HTTP-alt",
+    8443: "HTTPS-alt",
+    25565: "Minecraft",
 }
 
 ROLE_SIGNALS = {

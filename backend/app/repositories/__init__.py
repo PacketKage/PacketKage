@@ -1,4 +1,5 @@
 """Repository layer — isolates persistence from business logic."""
+
 from __future__ import annotations
 
 from sqlalchemy import delete, desc, func, select, update
@@ -124,9 +125,7 @@ class CaptureRepository:
             # JSON columns can't be queried with LIKE portably — read id +
             # capture_ids as plain tuples (Core connection, no ORM loading)
             # and rewrite only the cases that contain the id.
-            for case_id_value, case_ids in conn.execute(
-                select(CaseModel.id, CaseModel.capture_ids)
-            ).all():
+            for case_id_value, case_ids in conn.execute(select(CaseModel.id, CaseModel.capture_ids)).all():
                 if case_ids and capture_id in case_ids:
                     conn.execute(
                         update(CaseModel)
@@ -146,9 +145,7 @@ class FlowRepository:
         self.db = db
 
     def create_many(self, capture_id: str, flow_dicts: list[dict]) -> list[FlowModel]:
-        models = [
-            FlowModel(id=new_id(), capture_id=capture_id, **fd) for fd in flow_dicts
-        ]
+        models = [FlowModel(id=new_id(), capture_id=capture_id, **fd) for fd in flow_dicts]
         self.db.add_all(models)
         self.db.commit()
         return models
@@ -157,11 +154,7 @@ class FlowRepository:
         return self.db.get(FlowModel, flow_id)
 
     def list_for_capture(self, capture_id: str) -> list[FlowModel]:
-        stmt = (
-            select(FlowModel)
-            .where(FlowModel.capture_id == capture_id)
-            .order_by(FlowModel.first_seen)
-        )
+        stmt = select(FlowModel).where(FlowModel.capture_id == capture_id).order_by(FlowModel.first_seen)
         return list(self.db.scalars(stmt))
 
     def page_for_capture(
@@ -181,9 +174,7 @@ class FlowRepository:
         if direction:
             stmt = stmt.where(FlowModel.direction == direction.lower())
 
-        total = self.db.scalar(
-            select(func.count()).select_from(FlowModel).where(stmt.whereclause)
-        )
+        total = self.db.scalar(select(func.count()).select_from(FlowModel).where(stmt.whereclause))
 
         # Whitelisted at the API layer (flows.py pattern); getattr is only a
         # belt-and-suspenders fallback so an unknown name can never reach order_by.
@@ -255,9 +246,7 @@ class DNSRepository:
         if rcode is not None:
             stmt = stmt.where(DNSTransactionModel.rcode == rcode)
 
-        total = self.db.scalar(
-            select(func.count()).select_from(DNSTransactionModel).where(stmt.whereclause)
-        )
+        total = self.db.scalar(select(func.count()).select_from(DNSTransactionModel).where(stmt.whereclause))
         stmt = stmt.order_by(DNSTransactionModel.timestamp).limit(limit).offset(offset)
         return list(self.db.scalars(stmt)), int(total or 0)
 
@@ -301,9 +290,7 @@ class HTTPRepository:
         if status is not None:
             stmt = stmt.where(HTTPTransactionModel.status_code == status)
 
-        total = self.db.scalar(
-            select(func.count()).select_from(HTTPTransactionModel).where(stmt.whereclause)
-        )
+        total = self.db.scalar(select(func.count()).select_from(HTTPTransactionModel).where(stmt.whereclause))
         stmt = stmt.order_by(HTTPTransactionModel.timestamp).limit(limit).offset(offset)
         return list(self.db.scalars(stmt)), int(total or 0)
 
@@ -344,16 +331,12 @@ class TLSRepository:
         if sni:
             stmt = stmt.where(TLSSessionModel.sni.ilike(f"%{sni}%"))
 
-        total = self.db.scalar(
-            select(func.count()).select_from(TLSSessionModel).where(stmt.whereclause)
-        )
+        total = self.db.scalar(select(func.count()).select_from(TLSSessionModel).where(stmt.whereclause))
         stmt = stmt.order_by(TLSSessionModel.first_seen).limit(limit).offset(offset)
         return list(self.db.scalars(stmt)), int(total or 0)
 
     def delete_for_capture(self, capture_id: str) -> int:
-        result = self.db.execute(
-            delete(TLSSessionModel).where(TLSSessionModel.capture_id == capture_id)
-        )
+        result = self.db.execute(delete(TLSSessionModel).where(TLSSessionModel.capture_id == capture_id))
         self.db.commit()
         return result.rowcount or 0
 
@@ -372,11 +355,7 @@ class AlertRepository:
         return self.db.get(AlertModel, alert_id)
 
     def list_for_capture(self, capture_id: str) -> list[AlertModel]:
-        stmt = (
-            select(AlertModel)
-            .where(AlertModel.capture_id == capture_id)
-            .order_by(desc(AlertModel.score))
-        )
+        stmt = select(AlertModel).where(AlertModel.capture_id == capture_id).order_by(desc(AlertModel.score))
         return list(self.db.scalars(stmt))
 
     def page_for_capture(
@@ -396,14 +375,8 @@ class AlertRepository:
         if rule:
             stmt = stmt.where(AlertModel.rule_name == rule)
 
-        total = self.db.scalar(
-            select(func.count()).select_from(AlertModel).where(stmt.whereclause)
-        )
-        stmt = (
-            stmt.order_by(desc(AlertModel.score), desc(AlertModel.created_at))
-            .limit(limit)
-            .offset(offset)
-        )
+        total = self.db.scalar(select(func.count()).select_from(AlertModel).where(stmt.whereclause))
+        stmt = stmt.order_by(desc(AlertModel.score), desc(AlertModel.created_at)).limit(limit).offset(offset)
         return list(self.db.scalars(stmt)), int(total or 0)
 
     def delete_for_capture(self, capture_id: str) -> int:
@@ -486,9 +459,7 @@ class TimelineRepository:
         if before is not None:
             stmt = stmt.where(TimelineEventModel.timestamp <= before)
 
-        total = self.db.scalar(
-            select(func.count()).select_from(TimelineEventModel).where(stmt.whereclause)
-        )
+        total = self.db.scalar(select(func.count()).select_from(TimelineEventModel).where(stmt.whereclause))
         stmt = stmt.order_by(TimelineEventModel.timestamp).limit(limit).offset(offset)
         return list(self.db.scalars(stmt)), int(total or 0)
 
@@ -503,9 +474,9 @@ class TimelineRepository:
         """(min, max) event timestamps across captures via SQL aggregates."""
         if not capture_ids:
             return None, None
-        stmt = select(
-            func.min(TimelineEventModel.timestamp), func.max(TimelineEventModel.timestamp)
-        ).where(TimelineEventModel.capture_id.in_(capture_ids))
+        stmt = select(func.min(TimelineEventModel.timestamp), func.max(TimelineEventModel.timestamp)).where(
+            TimelineEventModel.capture_id.in_(capture_ids)
+        )
         lo, hi = self.db.execute(stmt).one()
         return (float(lo) if lo is not None else None, float(hi) if hi is not None else None)
 
@@ -633,9 +604,7 @@ class PacketRepository:
         return parsed
 
     def delete_for_capture(self, capture_id: str) -> int:
-        result = self.db.execute(
-            delete(PacketModel).where(PacketModel.capture_id == capture_id)
-        )
+        result = self.db.execute(delete(PacketModel).where(PacketModel.capture_id == capture_id))
         self.db.commit()
         return result.rowcount or 0
 
@@ -687,11 +656,7 @@ class CaseRepository:
 
     def cases_containing(self, capture_id: str) -> list[CaseModel]:
         """Cases whose capture_ids list references the capture."""
-        return [
-            case
-            for case in self.list(limit=500)
-            if capture_id in (case.capture_ids or [])
-        ]
+        return [case for case in self.list(limit=500) if capture_id in (case.capture_ids or [])]
 
     def delete(self, case_id: str) -> bool:
         case = self.get(case_id)
@@ -704,8 +669,16 @@ class CaseRepository:
 
 # Evidence-graph relationship types the repository accepts as filters.
 GRAPH_RELATIONSHIPS = {
-    "DNS_QUERY", "RESOLVES_TO", "TLS_SNI", "HTTP_HOST", "FLOW",
-    "EXPOSES", "TRIGGERED", "TARGETS", "GROUPS", "INCLUDES",
+    "DNS_QUERY",
+    "RESOLVES_TO",
+    "TLS_SNI",
+    "HTTP_HOST",
+    "FLOW",
+    "EXPOSES",
+    "TRIGGERED",
+    "TARGETS",
+    "GROUPS",
+    "INCLUDES",
 }
 GRAPH_PROVENANCE = {"observed", "correlated", "enriched"}
 
@@ -725,9 +698,7 @@ class GraphEdgeRepository:
         return self.db.get(GraphEdgeModel, edge_id)
 
     def delete_for_capture(self, capture_id: str) -> int:
-        result = self.db.execute(
-            delete(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id)
-        )
+        result = self.db.execute(delete(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture_id))
         self.db.commit()
         return result.rowcount or 0
 
@@ -785,13 +756,8 @@ class GraphEdgeRepository:
         if with_alerts_only:
             stmt = stmt.where(func.json_array_length(GraphEdgeModel.alert_ids) > 0)
         if node_id:
-            stmt = stmt.where(
-                (GraphEdgeModel.source_id == node_id)
-                | (GraphEdgeModel.target_id == node_id)
-            )
-        stmt = stmt.order_by(
-            GraphEdgeModel.last_seen.desc(), GraphEdgeModel.source_id
-        ).limit(max_edges)
+            stmt = stmt.where((GraphEdgeModel.source_id == node_id) | (GraphEdgeModel.target_id == node_id))
+        stmt = stmt.order_by(GraphEdgeModel.last_seen.desc(), GraphEdgeModel.source_id).limit(max_edges)
         return list(self.db.scalars(stmt))
 
     def touching_ids(self, capture_id: str, edges: list[GraphEdgeModel]) -> set[str]:

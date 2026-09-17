@@ -1,4 +1,5 @@
 """Step 1 end-to-end tests: upload → analyze → job progress → persisted results."""
+
 from __future__ import annotations
 
 import time
@@ -10,9 +11,7 @@ from tests.conftest import TESTDATA
 def _upload(client, pcap_name: str) -> str:
     path = TESTDATA / pcap_name
     with open(path, "rb") as f:
-        resp = client.post(
-            "/api/captures", files={"file": (pcap_name, f, "application/octet-stream")}
-        )
+        resp = client.post("/api/captures", files={"file": (pcap_name, f, "application/octet-stream")})
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
@@ -44,9 +43,7 @@ def test_parsers_available(client):
 
 
 def test_upload_rejects_bad_extension(client):
-    resp = client.post(
-        "/api/captures", files={"file": ("evil.txt", b"hello", "text/plain")}
-    )
+    resp = client.post("/api/captures", files={"file": ("evil.txt", b"hello", "text/plain")})
     assert resp.status_code == 400
 
 
@@ -206,9 +203,7 @@ def test_job_events_stream_is_valid_json(client):
     # FastAPI's TestClient buffers the full SSE response; the stream closes
     # itself after the terminal snapshot is sent.
     body = resp.text
-    data_lines = [
-        line[len("data: "):] for line in body.splitlines() if line.startswith("data: ")
-    ]
+    data_lines = [line[len("data: ") :] for line in body.splitlines() if line.startswith("data: ")]
     assert data_lines, f"no SSE data events in response: {body!r}"
 
     snapshots = []
@@ -328,9 +323,8 @@ def test_concurrent_analyze_single_job(client):
     while time.time() < deadline:
         with SessionLocal() as db:
             statuses = [
-                j.status for j in db.scalars(
-                    select(AnalysisJobModel).where(AnalysisJobModel.capture_id == capture_id)
-                )
+                j.status
+                for j in db.scalars(select(AnalysisJobModel).where(AnalysisJobModel.capture_id == capture_id))
             ]
         if statuses and all(s in ("completed", "failed") for s in statuses):
             break
@@ -348,5 +342,7 @@ def test_concurrent_analyze_single_job(client):
             .limit(1)
         )
         assert dupes is None, "duplicate alert rows for (rule, src, dst) — race leaked two runs"
-        total = db.scalar(select(func.count()).select_from(AlertModel).where(AlertModel.capture_id == capture_id))
+        total = db.scalar(
+            select(func.count()).select_from(AlertModel).where(AlertModel.capture_id == capture_id)
+        )
     assert total is not None and total > 0

@@ -4,6 +4,7 @@ Network health rather than security: throughput, reliability, latency,
 top talkers, protocol distribution, and engineering-grade anomaly flags
 (packet loss indicators, reset storms, DNS degradation, MTU issues).
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -69,14 +70,14 @@ def compute_engineer_metrics(
 
     # ---- DNS latency ----
     latencies = [t["latency"] for t in dns_txns if t.get("latency") is not None]
-    nx_rate = (
-        sum(1 for t in dns_txns if t.get("rcode") == 3) / len(dns_txns) if dns_txns else 0
-    )
+    nx_rate = sum(1 for t in dns_txns if t.get("rcode") == 3) / len(dns_txns) if dns_txns else 0
     dns_stats = {
         "transactions": len(dns_txns),
         "avg_latency_ms": round(sum(latencies) / len(latencies) * 1000, 1) if latencies else None,
         "max_latency_ms": round(max(latencies) * 1000, 1) if latencies else None,
-        "p95_latency_ms": round(sorted(latencies)[min(int(len(latencies) * 0.95), len(latencies) - 1)] * 1000, 1)
+        "p95_latency_ms": round(
+            sorted(latencies)[min(int(len(latencies) * 0.95), len(latencies) - 1)] * 1000, 1
+        )
         if latencies
         else None,
         "nxdomain_rate": round(nx_rate, 3),
@@ -111,65 +112,81 @@ def compute_engineer_metrics(
     issues: list[dict] = []
 
     if retrans_ratio > RETRANS_RATIO_WARN:
-        issues.append({
-            "issue": "retransmissions",
-            "severity": "high" if retrans_ratio > 0.15 else "medium",
-            "detail": f"{total_retrans} retransmissions ({retrans_ratio * 100:.1f}% of TCP packets) — possible packet loss or congestion",
-        })
+        issues.append(
+            {
+                "issue": "retransmissions",
+                "severity": "high" if retrans_ratio > 0.15 else "medium",
+                "detail": f"{total_retrans} retransmissions ({retrans_ratio * 100:.1f}% of TCP packets) — possible packet loss or congestion",
+            }
+        )
     if syn_retrans > 0:
-        issues.append({
-            "issue": "syn_retransmissions",
-            "severity": "low",
-            "detail": f"{syn_retrans} SYN retransmissions — slow or dropping handshakes",
-        })
+        issues.append(
+            {
+                "issue": "syn_retransmissions",
+                "severity": "low",
+                "detail": f"{syn_retrans} SYN retransmissions — slow or dropping handshakes",
+            }
+        )
     if reset_ratio > RESET_RATIO_WARN:
-        issues.append({
-            "issue": "tcp_resets",
-            "severity": "medium" if reset_ratio > 0.3 else "low",
-            "detail": f"{total_resets} resets across {len(tcp_flows)} TCP flows ({reset_ratio * 100:.0f}%) — aborted connections",
-        })
+        issues.append(
+            {
+                "issue": "tcp_resets",
+                "severity": "medium" if reset_ratio > 0.3 else "low",
+                "detail": f"{total_resets} resets across {len(tcp_flows)} TCP flows ({reset_ratio * 100:.0f}%) — aborted connections",
+            }
+        )
     if failure_ratio > 0.5 and len(failed_flows) > 5:
-        issues.append({
-            "issue": "connection_failures",
-            "severity": "high" if failure_ratio > 0.7 else "medium",
-            "detail": f"{len(failed_flows)}/{len(flows)} connections never completed — unreachable service, firewall drops, or scan traffic",
-        })
+        issues.append(
+            {
+                "issue": "connection_failures",
+                "severity": "high" if failure_ratio > 0.7 else "medium",
+                "detail": f"{len(failed_flows)}/{len(flows)} connections never completed — unreachable service, firewall drops, or scan traffic",
+            }
+        )
     if dns_stats["avg_latency_ms"] and dns_stats["avg_latency_ms"] > DNS_LATENCY_WARN * 1000:
-        issues.append({
-            "issue": "dns_latency",
-            "severity": "medium",
-            "detail": f"average DNS latency {dns_stats['avg_latency_ms']} ms exceeds {DNS_LATENCY_WARN * 1000:.0f} ms",
-        })
+        issues.append(
+            {
+                "issue": "dns_latency",
+                "severity": "medium",
+                "detail": f"average DNS latency {dns_stats['avg_latency_ms']} ms exceeds {DNS_LATENCY_WARN * 1000:.0f} ms",
+            }
+        )
     if nx_rate > 0.3 and len(dns_txns) > 10:
-        issues.append({
-            "issue": "dns_nxdomain",
-            "severity": "medium",
-            "detail": f"{nx_rate * 100:.0f}% of DNS queries return NXDOMAIN — misconfigured resolver or stale records",
-        })
+        issues.append(
+            {
+                "issue": "dns_nxdomain",
+                "severity": "medium",
+                "detail": f"{nx_rate * 100:.0f}% of DNS queries return NXDOMAIN — misconfigured resolver or stale records",
+            }
+        )
     if mtu_issues > 0:
-        issues.append({
-            "issue": "mtu_boundary",
-            "severity": "low",
-            "detail": f"{mtu_issues} packets at {max_packet} bytes near MTU boundary — check for fragmentation/Path-MTU issues",
-        })
+        issues.append(
+            {
+                "issue": "mtu_boundary",
+                "severity": "low",
+                "detail": f"{mtu_issues} packets at {max_packet} bytes near MTU boundary — check for fragmentation/Path-MTU issues",
+            }
+        )
     bandwidth_bps = total_bytes * 8 / duration
     if bandwidth_bps > BYTES_PER_SEC_WARN * 8:
-        issues.append({
-            "issue": "high_bandwidth",
-            "severity": "info",
-            "detail": f"sustained {bandwidth_bps / 1e6:.1f} Mbps throughput",
-        })
+        issues.append(
+            {
+                "issue": "high_bandwidth",
+                "severity": "info",
+                "detail": f"sustained {bandwidth_bps / 1e6:.1f} Mbps throughput",
+            }
+        )
 
     # asymmetric routing: many one-way flows without reverse traffic
-    one_way = sum(
-        1 for f in flows if f["packets_reverse"] == 0 and f["transport_protocol"] == "TCP"
-    )
+    one_way = sum(1 for f in flows if f["packets_reverse"] == 0 and f["transport_protocol"] == "TCP")
     if one_way > 5 and len(tcp_flows) > 10 and one_way / len(tcp_flows) > 0.5:
-        issues.append({
-            "issue": "asymmetric_routing",
-            "severity": "medium",
-            "detail": f"{one_way}/{len(tcp_flows)} TCP flows have no return traffic — asymmetric routing or capture point misses one direction",
-        })
+        issues.append(
+            {
+                "issue": "asymmetric_routing",
+                "severity": "medium",
+                "detail": f"{one_way}/{len(tcp_flows)} TCP flows have no return traffic — asymmetric routing or capture point misses one direction",
+            }
+        )
 
     return {
         "capture_duration_s": round(duration, 3),
@@ -198,6 +215,7 @@ def compute_engineer_metrics(
         "mtu_boundary_packets": mtu_issues,
         "timeseries": {"pps": ts_pps, "bandwidth": ts_bandwidth},
         "issues": issues,
-        "health": "degraded" if any(i["severity"] == "high" for i in issues)
+        "health": "degraded"
+        if any(i["severity"] == "high" for i in issues)
         else ("warning" if issues else "healthy"),
     }

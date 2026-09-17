@@ -1,4 +1,5 @@
 """TSharkParser — optional enhanced parser (direct tshark integration, no PyShark)."""
+
 from __future__ import annotations
 
 import shutil

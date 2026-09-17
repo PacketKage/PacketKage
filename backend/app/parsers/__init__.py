@@ -1,4 +1,5 @@
 """Parser package — registers all built-in parsers."""
+
 from app.parsers.base import PacketParser, ParserError, ParserRegistry, registry, resolve_parser
 from app.parsers.scapy_parser import ScapyParser
 from app.parsers.tshark_parser import TSharkParser

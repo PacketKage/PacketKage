@@ -7,6 +7,7 @@ SQL filtering (relationship/provenance/time-window/alerts/focus), node caps
 bounds, missing-evidence behavior, 404s, adversarial scale, and regression
 of the untouched v1 graph.
 """
+
 from __future__ import annotations
 
 import re
@@ -156,9 +157,7 @@ def test_v2_aggregation_c2_beacon(client):
 
 def test_v2_filter_relationships(client):
     capture_id = _analyze(client, "normal_traffic.pcap")
-    g = client.get(
-        f"/api/graph/v2?capture_id={capture_id}&relationships=DNS_QUERY,RESOLVES_TO"
-    ).json()
+    g = client.get(f"/api/graph/v2?capture_id={capture_id}&relationships=DNS_QUERY,RESOLVES_TO").json()
     assert {e["relationship"] for e in g["edges"]} == {"DNS_QUERY", "RESOLVES_TO"}
 
     # invalid relationship rejected
@@ -182,17 +181,13 @@ def test_v2_time_window_filters(client):
     all_g = client.get(f"/api/graph/v2?capture_id={capture_id}").json()
     # c2 beacon spans BASE_TS .. BASE_TS+1170s; take a narrow early window
     t0 = min(e["first_seen"] for e in all_g["edges"])
-    early = client.get(
-        f"/api/graph/v2?capture_id={capture_id}&after={t0}&before={t0 + 60}"
-    ).json()
+    early = client.get(f"/api/graph/v2?capture_id={capture_id}&after={t0}&before={t0 + 60}").json()
     assert early["edges"], "early window must contain edges"
     for e in early["edges"]:
         assert e["last_seen"] >= t0 and e["first_seen"] <= t0 + 60
 
     # window entirely after capture end → no edges
-    late = client.get(
-        f"/api/graph/v2?capture_id={capture_id}&after={t0 + 100000}"
-    ).json()
+    late = client.get(f"/api/graph/v2?capture_id={capture_id}&after={t0 + 100000}").json()
     assert late["edges"] == []
 
 
@@ -202,28 +197,20 @@ def test_v2_min_alerts_and_focus(client):
     assert g["edges"]
     assert all(e["alert_ids"] for e in g["edges"])
 
-    focus = client.get(
-        f"/api/graph/v2?capture_id={capture_id}&node_id=host:192.168.1.42"
-    ).json()
+    focus = client.get(f"/api/graph/v2?capture_id={capture_id}&node_id=host:192.168.1.42").json()
     assert focus["edges"]
-    assert all(
-        "host:192.168.1.42" in (e["source"], e["target"]) for e in focus["edges"]
-    )
+    assert all("host:192.168.1.42" in (e["source"], e["target"]) for e in focus["edges"])
 
 
 def test_v2_node_detail_endpoint(client):
     capture_id = _analyze(client, "normal_traffic.pcap")
-    node = client.get(
-        f"/api/graph/v2/node?capture_id={capture_id}&node_id=host:192.168.1.42"
-    ).json()
+    node = client.get(f"/api/graph/v2/node?capture_id={capture_id}&node_id=host:192.168.1.42").json()
     assert node["node"]["kind"] == "host"
     assert node["node"]["ip"] == "192.168.1.42"
     assert node["edges"], "incident edges present"
     assert node["stats"]["edge_count"] == len(node["edges"])
 
-    resp = client.get(
-        f"/api/graph/v2/node?capture_id={capture_id}&node_id=host:10.99.99.99"
-    )
+    resp = client.get(f"/api/graph/v2/node?capture_id={capture_id}&node_id=host:10.99.99.99")
     # host never seen in this capture → 404 (no invented nodes)
     assert resp.status_code == 404
 
@@ -248,9 +235,7 @@ def test_v2_edge_detail_missing_evidence_is_empty_not_error(client):
 def test_v2_node_limit_and_truncated_flag(client):
     capture_id = _analyze(client, "large_graph.pcap")
     full = client.get(f"/api/graph/v2?capture_id={capture_id}").json()
-    capped = client.get(
-        f"/api/graph/v2?capture_id={capture_id}&limit=50"
-    ).json()
+    capped = client.get(f"/api/graph/v2?capture_id={capture_id}&limit=50").json()
     assert capped["truncated"] is True
     assert len(capped["nodes"]) <= 50 + 10  # cap + focus expansion slack
     assert capped["stats"]["total_edges_in_capture"] >= full["stats"]["edge_count"]
@@ -300,8 +285,7 @@ def test_v2_provenance_reference_caps_forced(client):
 def test_v2_attack_paths_bounded(client):
     capture_id = _analyze(client, "normal_traffic.pcap")
     p = client.get(
-        f"/api/graph/v2/paths?capture_id={capture_id}"
-        "&source=host:192.168.1.42&target=host:93.184.216.34"
+        f"/api/graph/v2/paths?capture_id={capture_id}&source=host:192.168.1.42&target=host:93.184.216.34"
     ).json()
     assert p["paths"], "direct flow path exists"
     path = p["paths"][0]
@@ -312,9 +296,8 @@ def test_v2_attack_paths_bounded(client):
 
     # hops traverse observed edges: adjacent nodes share an edge
     edges = {
-        (e["source"], e["target"]) for e in client.get(
-            f"/api/graph/v2?capture_id={capture_id}"
-        ).json()["edges"]
+        (e["source"], e["target"])
+        for e in client.get(f"/api/graph/v2?capture_id={capture_id}").json()["edges"]
     }
     for a, b in zip(path["nodes"], path["nodes"][1:], strict=False):
         assert (a, b) in edges or (b, a) in edges
@@ -328,8 +311,7 @@ def test_v2_attack_paths_bounded(client):
 
     # unknown nodes → empty with reason, not error
     missing = client.get(
-        f"/api/graph/v2/paths?capture_id={capture_id}"
-        "&source=host:1.2.3.4&target=host:93.184.216.34"
+        f"/api/graph/v2/paths?capture_id={capture_id}&source=host:1.2.3.4&target=host:93.184.216.34"
     ).json()
     assert missing["paths"] == [] and missing["reason"] == "unknown node"
 
@@ -345,17 +327,14 @@ def test_v2_attack_paths_no_invented_hops(client):
     """Multi-hop path through DNS: host → domain → resolved ip."""
     capture_id = _analyze(client, "dns_tunneling.pcap")
     p = client.get(
-        f"/api/graph/v2/paths?capture_id={capture_id}"
-        "&source=host:192.168.1.42&target=host:8.8.8.8"
+        f"/api/graph/v2/paths?capture_id={capture_id}&source=host:192.168.1.42&target=host:8.8.8.8"
     ).json()
     for path in p["paths"]:
         for node in path["nodes"]:
             kind = node.split(":", 1)[0]
             assert kind in ("host", "domain", "service", "alert", "incident")
             # every node in a path must appear in the capture's graph
-        found = client.get(
-            f"/api/graph/v2?capture_id={capture_id}&node_id={path['nodes'][0]}"
-        ).json()
+        found = client.get(f"/api/graph/v2?capture_id={capture_id}&node_id={path['nodes'][0]}").json()
         assert found["edges"], "path start must be a real observed node"
 
 
@@ -364,9 +343,7 @@ def test_v2_attack_paths_no_invented_hops(client):
 
 def test_v2_blast_radius_bounded(client):
     capture_id = _analyze(client, "large_graph.pcap")
-    b = client.get(
-        f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=2"
-    ).json()
+    b = client.get(f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=2").json()
     assert b["start"] == "host:192.168.1.42"
     assert b["depth"] == 2
     assert len(b["nodes"]) <= 500
@@ -387,22 +364,14 @@ def test_v2_blast_radius_bounded(client):
 
 def test_v2_blast_radius_depth_caps(client):
     capture_id = _analyze(client, "large_graph.pcap")
-    shallow = client.get(
-        f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=1"
-    ).json()
-    deep = client.get(
-        f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=3"
-    ).json()
+    shallow = client.get(f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=1").json()
+    deep = client.get(f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=3").json()
     assert len(deep["nodes"]) >= len(shallow["nodes"])
     # API rejects depth > 3
-    resp = client.get(
-        f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=9"
-    )
+    resp = client.get(f"/api/graph/v2/blast?capture_id={capture_id}&host=host:192.168.1.42&depth=9")
     assert resp.status_code == 422
     # unknown host → 404
-    resp = client.get(
-        f"/api/graph/v2/blast?capture_id={capture_id}&host=host:8.8.4.4"
-    )
+    resp = client.get(f"/api/graph/v2/blast?capture_id={capture_id}&host=host:8.8.4.4")
     assert resp.status_code == 404
 
 
@@ -418,9 +387,7 @@ def test_v2_lazy_backfill_idempotent(client):
     from app.db.orm import GraphEdgeModel
 
     with SessionLocal() as db:
-        db.query(GraphEdgeModel).filter(
-            GraphEdgeModel.capture_id == capture_id
-        ).delete()
+        db.query(GraphEdgeModel).filter(GraphEdgeModel.capture_id == capture_id).delete()
         db.commit()
 
     g1 = client.get(f"/api/graph/v2?capture_id={capture_id}").json()
@@ -437,10 +404,7 @@ def test_v1_graph_regression_untouched(client):
     capture_id = _analyze(client, "normal_traffic.pcap")
     graph = client.get(f"/api/graph?capture_id={capture_id}").json()
     nodes = {n["data"]["id"] for n in graph["nodes"]}
-    edge_types = {
-        (e["data"]["source"], e["data"]["target"], e["data"]["type"])
-        for e in graph["edges"]
-    }
+    edge_types = {(e["data"]["source"], e["data"]["target"], e["data"]["type"]) for e in graph["edges"]}
     assert {"192.168.1.42", "example.com", "93.184.216.34:80"} <= nodes
     assert ("192.168.1.42", "example.com", "DNS") in edge_types
     assert ("192.168.1.42", "93.184.216.34", "HTTP") in edge_types
@@ -454,9 +418,7 @@ def test_v2_404s_and_scoping(client):
     assert resp.status_code == 404
     other = _analyze(client, "c2_beacon.pcap")
     # node scoped per capture: a node from capture A is 404 under capture B
-    resp = client.get(
-        f"/api/graph/v2/node?capture_id={other}&node_id=domain:example.com"
-    )
+    resp = client.get(f"/api/graph/v2/node?capture_id={other}&node_id=domain:example.com")
     # example.com genuinely absent from c2_beacon → unknown node
     assert resp.status_code == 404
 
@@ -470,8 +432,7 @@ def test_v2_empty_capture_states(client):
     assert all(not e["explanation"] for e in g["edges"])
     assert all(not e["alert_ids"] for e in g["edges"])
     p = client.get(
-        f"/api/graph/v2/paths?capture_id={capture_id}"
-        "&source=host:192.168.1.42&target=host:192.168.1.1"
+        f"/api/graph/v2/paths?capture_id={capture_id}&source=host:192.168.1.42&target=host:192.168.1.1"
     ).json()
     assert isinstance(p["paths"], list)
 

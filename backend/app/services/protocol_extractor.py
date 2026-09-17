@@ -5,6 +5,7 @@ Turns per-packet metadata hints into paired transactions:
 - HTTP: request ↔ response matching by (client, server, server_port) in time order
 - TLS: sessions grouped by flow (SNI recorded when ClientHello observed)
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -134,9 +135,7 @@ def extract_tls(parsed: ParsedCapture, flows: list[dict] | None = None) -> list[
                     flow_by_ref[ref] = f
 
     for pkt in parsed.packets:
-        is_tls = pkt.protocol == "TLS" or (
-            pkt.transport == "TCP" and pkt.destination_port in (443, 8443)
-        )
+        is_tls = pkt.protocol == "TLS" or (pkt.transport == "TCP" and pkt.destination_port in (443, 8443))
         if not is_tls:
             continue
         if flows:
@@ -199,12 +198,8 @@ def protocol_statistics(parsed) -> dict[str, Any]:
         )
         if any(t["latency"] is not None for t in dns)
         else None,
-        "top_domains": _top(
-            [t["query_name"].rstrip(".") for t in dns if t["query_name"]], 10
-        ),
-        "nxdomain_domains": _top(
-            [t["query_name"].rstrip(".") for t in nxdomain], 10
-        ),
+        "top_domains": _top([t["query_name"].rstrip(".") for t in dns if t["query_name"]], 10),
+        "nxdomain_domains": _top([t["query_name"].rstrip(".") for t in nxdomain], 10),
         "longest_queries": sorted(
             ({t["query_name"] for t in dns if t["query_name"]}),
             key=len,

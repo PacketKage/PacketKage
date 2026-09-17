@@ -6,15 +6,33 @@ conversation land in the same flow, with forward/reverse counters tracked separa
 Evidence: each flow keeps packet_refs (indices into the normalized packet list)
 so Flow -> related packets is a pure lookup, no re-parsing.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from app.core.models import NormalizedPacket
 
-PRIVATE_V4_PREFIXES = ("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
-                       "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-                        "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")
+PRIVATE_V4_PREFIXES = (
+    "10.",
+    "192.168.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+)
 
 
 def _is_private_v6(ip: str) -> bool:
@@ -26,11 +44,7 @@ def _is_private_v6(ip: str) -> bool:
     if first.startswith(("fc", "fd")) and len(first) <= 4:
         return True
     # fe80::/10 — link-local
-    return (
-        first.startswith(("fe8", "fe9", "fea", "feb"))
-        or low.startswith("fe80:")
-        or low == "fe80::"
-    )
+    return first.startswith(("fe8", "fe9", "fea", "feb")) or low.startswith("fe80:") or low == "fe80::"
 
 
 def is_private_ip(ip: str | None) -> bool:

@@ -1,5 +1,6 @@
 """Phase 2 tests: new detection rules (ARP spoofing, lateral movement, DGA,
 exfiltration, low-and-slow beaconing) + alert correlation into incidents."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -92,7 +93,10 @@ def test_data_exfiltration_alert(client):
     assert a["evidence"]["bytes"] >= 500_000  # ~400 packets * 1400 bytes
     assert a["evidence"]["destination_resolved_via_dns"] is False  # first contact
     assert a["score"] >= 60
-    assert any("first-contact" in r["reason"].lower() or "never resolved" in r["detail"].lower() for r in a["reasons"])
+    assert any(
+        "first-contact" in r["reason"].lower() or "never resolved" in r["detail"].lower()
+        for r in a["reasons"]
+    )
 
 
 # ---------------- Low-and-slow beaconing ----------------

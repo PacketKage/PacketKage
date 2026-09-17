@@ -116,9 +116,7 @@ class AnalysisService:
 
             # ---- Suspicion engine (Step 4) — flows already have DB ids ----
             self.jobs.update(job, stage="behavioral_analysis", progress=98)
-            alert_dicts = SuspicionEngine().run(
-                parsed, flow_dicts, dns_txns, id_by_flow, http_txns=http_txns
-            )
+            alert_dicts = SuspicionEngine().run(parsed, flow_dicts, dns_txns, id_by_flow, http_txns=http_txns)
             SuspicionEngine.augment_hosts(host_dicts, alert_dicts)
 
             # Persist alerts BEFORE timeline so events reference real alert ids
@@ -132,16 +130,30 @@ class AnalysisService:
             # ---- Timeline (Step 5) ----
             self.jobs.update(job, stage="timeline_construction", progress=99)
             event_dicts = build_timeline(
-                parsed, flow_dicts, dns_txns, http_txns, tls_sessions,
-                alert_dicts, id_by_flow, alert_id_map,
+                parsed,
+                flow_dicts,
+                dns_txns,
+                http_txns,
+                tls_sessions,
+                alert_dicts,
+                id_by_flow,
+                alert_id_map,
             )
 
             self._persist_results(
-                capture, parsed, parser.name, None,  # flows persisted above
-                dns_txns=dns_txns, http_txns=http_txns, tls_sessions=tls_sessions,
-                host_dicts=host_dicts, alert_dicts=alert_dicts,
-                flow_dicts_for_summary=flow_dicts, event_dicts=event_dicts,
-                alerts_already_persisted=True, alert_id_map=alert_id_map,
+                capture,
+                parsed,
+                parser.name,
+                None,  # flows persisted above
+                dns_txns=dns_txns,
+                http_txns=http_txns,
+                tls_sessions=tls_sessions,
+                host_dicts=host_dicts,
+                alert_dicts=alert_dicts,
+                flow_dicts_for_summary=flow_dicts,
+                event_dicts=event_dicts,
+                alerts_already_persisted=True,
+                alert_id_map=alert_id_map,
             )
 
             # ---- Evidence graph materialization (Graph 2.0) ----
@@ -171,7 +183,9 @@ class AnalysisService:
                     "tls_sessions": len(tls_sessions),
                     "alerts": len(alert_dicts),
                     "timeline_events": len(event_dicts),
-                    "protocols": dict(Counter(p.protocol or "unknown" for p in parsed.packets).most_common(10)),
+                    "protocols": dict(
+                        Counter(p.protocol or "unknown" for p in parsed.packets).most_common(10)
+                    ),
                 },
             )
             self.captures.update(
@@ -182,9 +196,7 @@ class AnalysisService:
                 parser_used=parser.name,
             )
         except Exception as exc:
-            self.jobs.update(
-                job, status="failed", stage="failed", message=str(exc), finished_at=_utcnow()
-            )
+            self.jobs.update(job, status="failed", stage="failed", message=str(exc), finished_at=_utcnow())
             self.captures.update(capture, status="failed", error=str(exc))
             raise
 
@@ -250,13 +262,8 @@ class AnalysisService:
             "protocol_counts": dict(protocol_counts.most_common()),
             "transport_counts": dict(transport_counts.most_common()),
             "unique_source_ips": len(src_ips),
-            "unique_destination_ips": len(
-                {p.destination_ip for p in packets if p.destination_ip}
-            ),
-            "top_talkers": [
-                {"ip": ip, "packets": count}
-                for ip, count in src_ips.most_common(10)
-            ],
+            "unique_destination_ips": len({p.destination_ip for p in packets if p.destination_ip}),
+            "top_talkers": [{"ip": ip, "packets": count} for ip, count in src_ips.most_common(10)],
             "warnings": parsed.warnings[:20],
         }
         if flow_dicts is not None:
@@ -303,10 +310,11 @@ class AnalysisService:
                 "max_score": max((a["score"] for a in alert_dicts), default=0),
             }
             # correlated incidents (Phase 2)
-            persisted_alerts = [
-                {**a, "id": alert_id_map.get(id(a))} if alert_id_map.get(id(a)) else a
-                for a in alert_dicts
-            ] if alert_id_map else alert_dicts
+            persisted_alerts = (
+                [{**a, "id": alert_id_map.get(id(a))} if alert_id_map.get(id(a)) else a for a in alert_dicts]
+                if alert_id_map
+                else alert_dicts
+            )
             summary["incidents"] = correlate_alerts(persisted_alerts)[:20]
         if event_dicts is not None:
             summary["timeline_summary"] = {

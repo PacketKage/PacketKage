@@ -1,4 +1,5 @@
 """Step 4 tests: suspicion engine — every scenario must trigger its expected alerts."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -233,9 +234,7 @@ def test_alert_flow_evidence_links_are_real_ids(client):
         flow_ids: set[str] = set()
         offset = 0
         while True:
-            body = client.get(
-                f"/api/flows?capture_id={capture_id}&limit=500&offset={offset}"
-            ).json()
+            body = client.get(f"/api/flows?capture_id={capture_id}&limit=500&offset={offset}").json()
             flow_ids.update(f["id"] for f in body["items"])
             offset += len(body["items"])
             if offset >= body["total"] or not body["items"]:

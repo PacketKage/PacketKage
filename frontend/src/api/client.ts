@@ -1,5 +1,7 @@
 import type {
   Alert,
+  AuthStatus,
+  AuthUser,
   Capture,
   Case,
   CaseDetail,
@@ -21,11 +23,21 @@ import type {
   LiveStatus,
   Page,
   ProtocolStats,
+  SetupConfig,
+  SetupSaveResult,
+  SetupStatus,
+  SetupTestResult,
+  SetupValues,
   TimelineEvent,
   TLSSession,
 } from '../types/api'
 
 const BASE = '/api'
+
+/** First-run setup endpoints accept a one-time token from remote callers. */
+function setupHeaders(token?: string): Record<string, string> {
+  return token ? { 'X-Setup-Token': token } : {}
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${BASE}${path}`, init)
@@ -351,4 +363,50 @@ export const api = {
   // Engineer Mode (Step 6)
   getEngineerMetrics: (captureId: string) =>
     request<EngineerMetrics>(`/engineer/metrics?capture_id=${captureId}`),
+
+  // ---- Authentication (OIDC / Authentik) ----
+
+  /** Public: whether OIDC is configured and which groups map to which role. */
+  authStatus: () => request<AuthStatus>('/auth/status'),
+
+  logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+
+  /**
+   * Non-throwing identity probe — the single source of "who am I".
+   * Returns the session user, or null when there is no usable session
+   * (401 missing/invalid cookie, 403 wrong role, 503 unconfigured).
+   * Never throws, so top-of-tree callers can treat it as "anonymous".
+   */
+  async fetchAuthMe(): Promise<AuthUser | null> {
+    try {
+      return await request<AuthUser>('/auth/me')
+    } catch {
+      return null
+    }
+  },
+
+  // ---- First-run setup wizard ----
+
+  /** Public: whether OIDC is configured and if this caller needs a setup token. */
+  setupStatus: () => request<SetupStatus>('/setup/status'),
+
+  /** Current settings + env-locked fields (requires setup token or admin). */
+  setupConfig: (token?: string) =>
+    request<SetupConfig>('/setup/config', { headers: setupHeaders(token) }),
+
+  /** OIDC discovery + JWKS pre-flight — validates without saving. */
+  testSetup: (values: Partial<SetupValues>, token?: string) =>
+    request<SetupTestResult>('/setup/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...setupHeaders(token) },
+      body: JSON.stringify(values),
+    }),
+
+  /** Persist and activate the OIDC settings (no restart required). */
+  saveSetup: (values: Partial<SetupValues>, token?: string) =>
+    request<SetupSaveResult>('/setup/oidc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...setupHeaders(token) },
+      body: JSON.stringify(values),
+    }),
 }

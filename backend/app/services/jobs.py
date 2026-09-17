@@ -3,6 +3,7 @@
 SQLite note: each job runs in its own thread with its own session to avoid
 cross-thread session sharing. WAL-friendly and simple for v1.
 """
+
 from __future__ import annotations
 
 import threading
@@ -18,9 +19,7 @@ class JobManager:
         self._threads: dict[str, threading.Thread] = {}
         self._lock = threading.Lock()
 
-    def submit(
-        self, capture_id: str, job_id: str, file_path: str | None, parser_name: str | None
-    ) -> None:
+    def submit(self, capture_id: str, job_id: str, file_path: str | None, parser_name: str | None) -> None:
         thread = threading.Thread(
             target=self._run_job,
             args=(capture_id, job_id, file_path, parser_name),

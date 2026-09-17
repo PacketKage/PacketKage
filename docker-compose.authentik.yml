@@ -1,0 +1,100 @@
+# Bundled Authentik identity provider for local evaluation.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build
+#
+# Requires the Authentik values in .env (see .env.example) and, so the browser
+# can reach the provider at the SAME issuer URL the backend uses, one hosts
+# entry:  127.0.0.1 authentik
+# (the backend resolves `authentik` on the compose network; your browser
+# resolves it via /etc/hosts). See docs/authentik-setup.md.
+
+services:
+  packetkage:
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRESQL__PASSWORD:?set AUTHENTIK_POSTGRESQL__PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
+      interval: 10s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - authentik-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:alpine
+    command: --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      retries: 10
+    volumes:
+      - authentik-redis:/data
+    restart: unless-stopped
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL__PASSWORD}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9443:9443"
+    networks:
+      default:
+        # Alias so both the app container and (via /etc/hosts) the browser use
+        # the same hostname — OIDC issuer checks are host-sensitive.
+        aliases:
+          - authentik
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 15s
+      start_period: 60s
+      retries: 10
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    restart: unless-stopped
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: worker
+    environment: *authentik-env
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - authentik-media:/media
+      - authentik-certs:/certs
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  authentik-db:
+  authentik-redis:
+  authentik-media:
+  authentik-templates:
+  authentik-certs:

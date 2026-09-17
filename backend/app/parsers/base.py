@@ -10,6 +10,7 @@ PacketKage normalized model (ParsedCapture / NormalizedPacket)
 
 Parser-specific objects (Scapy packets, TShark JSON) NEVER leave this layer.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -78,7 +79,5 @@ def resolve_parser(requested: str | None) -> PacketParser:
     if parser is None:
         raise ParserError(f"Unknown parser: {requested!r}")
     if not parser.available():
-        raise ParserError(
-            f"Parser {requested!r} is not available on this system (is tshark installed?)"
-        )
+        raise ParserError(f"Parser {requested!r} is not available on this system (is tshark installed?)")
     return parser

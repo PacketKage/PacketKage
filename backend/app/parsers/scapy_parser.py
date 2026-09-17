@@ -1,4 +1,5 @@
 """ScapyParser — default, guaranteed to work without Wireshark/TShark."""
+
 from __future__ import annotations
 
 import os
@@ -154,7 +155,8 @@ class ScapyParser(PacketParser):
                 udp = pkt[UDP]
                 sport, dport = int(udp.sport), int(udp.dport)
                 app_protocol = (
-                    "QUIC" if dport == 443 or sport == 443
+                    "QUIC"
+                    if dport == 443 or sport == 443
                     else ScapyParser._guess_app_protocol(sport, dport, pkt)
                 )
             elif pkt.haslayer(ICMP):
@@ -202,7 +204,8 @@ class ScapyParser(PacketParser):
                 udp = pkt[UDP]
                 sport, dport = int(udp.sport), int(udp.dport)
                 app_protocol = (
-                    "QUIC" if dport == 443 or sport == 443
+                    "QUIC"
+                    if dport == 443 or sport == 443
                     else ScapyParser._guess_app_protocol(sport, dport, pkt)
                 )
             elif ICMP in pkt:
@@ -253,9 +256,7 @@ class ScapyParser(PacketParser):
                 packet_reference=index,
             )
 
-        return NormalizedPacket(
-            timestamp=timestamp, protocol="RAW", length=length, packet_reference=index
-        )
+        return NormalizedPacket(timestamp=timestamp, protocol="RAW", length=length, packet_reference=index)
 
     @staticmethod
     def _tcp_flags(value: int) -> list[str]:
@@ -306,8 +307,10 @@ class ScapyParser(PacketParser):
                 metadata["dns.answers"] = answers
         if HTTPRequest in pkt:
             http = pkt[HTTPRequest]
+
             def _s(v) -> str:
                 return str(v, "utf-8", "replace") if isinstance(v, bytes) else str(v)
+
             metadata["http.method"] = _s(http.Method)
             metadata["http.host"] = _s(http.Host)
             metadata["http.path"] = _s(http.Path)
@@ -375,11 +378,21 @@ class ScapyParser(PacketParser):
                             name, value = opt[0], opt[1]
                             if name == "message-type":
                                 # 1=DISCOVER 2=OFFER 3=REQUEST 5=ACK
-                                dhcp_types = {1: "DISCOVER", 2: "OFFER", 3: "REQUEST", 4: "DECLINE", 5: "ACK", 6: "NAK", 7: "RELEASE"}
+                                dhcp_types = {
+                                    1: "DISCOVER",
+                                    2: "OFFER",
+                                    3: "REQUEST",
+                                    4: "DECLINE",
+                                    5: "ACK",
+                                    6: "NAK",
+                                    7: "RELEASE",
+                                }
                                 metadata["dhcp.message_type"] = dhcp_types.get(int(value), str(value))
                             elif name == "hostname":
                                 metadata["dhcp.hostname"] = (
-                                    value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+                                    value.decode("utf-8", "replace")
+                                    if isinstance(value, bytes)
+                                    else str(value)
                                 )
                 if bootp.yiaddr and str(bootp.yiaddr) != "0.0.0.0":
                     metadata["dhcp.assigned_ip"] = str(bootp.yiaddr)

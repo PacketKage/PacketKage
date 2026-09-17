@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import {
@@ -11,6 +11,7 @@ import {
   PlayCircle,
   Radar,
   ScanSearch,
+  Shield,
   Table2,
   Users,
   Waypoints,
@@ -19,6 +20,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Logo } from './Logo'
 import { Topbar, APP_VERSION } from './Topbar'
 import { useTheme } from '../hooks/theme'
+import { useAuth } from '../auth/AuthContext'
 
 interface NavItem {
   to: string
@@ -75,6 +77,21 @@ function readInitialCollapsed(): boolean {
 export function Layout() {
   const [collapsed, setCollapsed] = useState(readInitialCollapsed)
   const { theme } = useTheme()
+  const { isAdmin } = useAuth()
+
+  // The Admin link is visible only to admins (mirrors the backend's
+  // admin-only endpoints; the route itself is wrapped in RequireAdmin).
+  const navGroups = useMemo(
+    () =>
+      isAdmin
+        ? NAV_GROUPS.map((g) =>
+            g.label === 'System'
+              ? { ...g, items: [...g.items, { to: '/admin', label: 'Admin', icon: Shield }] }
+              : g,
+          )
+        : NAV_GROUPS,
+    [isAdmin],
+  )
 
   // persist + '[' keyboard shortcut
   useEffect(() => {
@@ -121,7 +138,7 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.label} className="mb-4 last:mb-0">
               <div
                 className={`mb-1.5 px-2.5 text-xs font-semibold uppercase tracking-wider text-fg-subtle ${

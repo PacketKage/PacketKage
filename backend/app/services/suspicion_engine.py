@@ -5,6 +5,7 @@ Every alert must be explainable:
 
 No ML. No black boxes. Every score traces back to observable network facts.
 """
+
 from __future__ import annotations
 
 import re
@@ -86,9 +87,7 @@ def _severity_for(score: int) -> str:
 
 def rule_port_scan(flows: list[dict]) -> list[RuleResult]:
     """One source probing many distinct ports on one destination."""
-    scans: dict[tuple, dict] = defaultdict(
-        lambda: {"ports": set(), "flows": [], "first": None, "last": None}
-    )
+    scans: dict[tuple, dict] = defaultdict(lambda: {"ports": set(), "flows": [], "first": None, "last": None})
     for f in flows:
         if f["transport_protocol"] != "TCP" or not f["failed"]:
             continue
@@ -157,7 +156,7 @@ def rule_beaconing(flows: list[dict]) -> list[RuleResult]:
             continue
         mean = sum(intervals) / len(intervals)
         variance = sum((i - mean) ** 2 for i in intervals) / len(intervals)
-        std = variance ** 0.5
+        std = variance**0.5
         # periodic = low jitter relative to interval
         if mean <= 0 or std / mean > 0.1:
             continue
@@ -233,11 +232,14 @@ def rule_dns_tunneling(parsed: ParsedCapture, dns_txns: list[dict]) -> list[Rule
             reasons.append(_reason("Long encoded labels", f"longest DNS label: {d['max_label']} chars", 35))
             score += 35
         if unique_sub >= 10:
-            reasons.append(_reason("High subdomain entropy", f"{unique_sub} unique subdomains under one parent", 30)
+            reasons.append(
+                _reason("High subdomain entropy", f"{unique_sub} unique subdomains under one parent", 30)
             )
             score += 30
         if d["nxdomain"] >= 10:
-            reasons.append(_reason("High NXDOMAIN rate", f"{d['nxdomain']}/{n_queries} queries returned NXDOMAIN", 15))
+            reasons.append(
+                _reason("High NXDOMAIN rate", f"{d['nxdomain']}/{n_queries} queries returned NXDOMAIN", 15)
+            )
             score += 15
         if not reasons:
             continue
@@ -302,8 +304,12 @@ def rule_nxdomain_burst(dns_txns: list[dict]) -> list[RuleResult]:
                 severity=_severity_for(int(score)),
                 score=int(score),
                 reasons=reasons,
-                evidence={"nxdomain_count": nx, "total_queries": total, "rate": round(rate, 3),
-                          "sample_domains": samples[client]},
+                evidence={
+                    "nxdomain_count": nx,
+                    "total_queries": total,
+                    "rate": round(rate, 3),
+                    "sample_domains": samples[client],
+                },
                 source_ip=client,
                 explanation=(
                     f"Host {client} generated {nx} NXDOMAIN responses ({rate * 100:.0f}% of its DNS "
@@ -338,8 +344,12 @@ def rule_suspicious_port(flows: list[dict]) -> list[RuleResult]:
                 severity=_severity_for(int(score)),
                 score=int(score),
                 reasons=reasons,
-                evidence={"port": port, "association": SUSPICIOUS_PORTS[port],
-                          "packets": f["packets"], "bytes": f["bytes"]},
+                evidence={
+                    "port": port,
+                    "association": SUSPICIOUS_PORTS[port],
+                    "packets": f["packets"],
+                    "bytes": f["bytes"],
+                },
                 source_ip=f["source_ip"],
                 destination_ip=f["destination_ip"],
                 destination_port=port,
@@ -433,8 +443,7 @@ def rule_connection_without_dns(flows: list[dict], dns_txns: list[dict]) -> list
                 severity=_severity_for(int(score)),
                 score=int(score),
                 reasons=reasons,
-                evidence={"connections": len(group), "bytes": total_bytes,
-                          "destination": f"{dst}:{dport}"},
+                evidence={"connections": len(group), "bytes": total_bytes, "destination": f"{dst}:{dport}"},
                 source_ip=src,
                 destination_ip=dst,
                 destination_port=dport,
@@ -451,8 +460,7 @@ def rule_connection_without_dns(flows: list[dict], dns_txns: list[dict]) -> list
 def rule_high_outbound_volume(flows: list[dict]) -> list[RuleResult]:
     """A single host sending an unusually large share of total outbound bytes."""
     internal_flows = [
-        f for f in flows
-        if is_private_ip(f["source_ip"]) and not is_private_ip(f["destination_ip"])
+        f for f in flows if is_private_ip(f["source_ip"]) and not is_private_ip(f["destination_ip"])
     ]
     if not internal_flows:
         return []
@@ -478,7 +486,11 @@ def rule_high_outbound_volume(flows: list[dict]) -> list[RuleResult]:
                     _reason("Dominant outbound traffic", f"{share * 100:.0f}% of all outbound bytes", 30),
                     _reason("Large data volume", f"{bytes_} bytes sent externally", 20),
                 ],
-                evidence={"bytes": bytes_, "share_of_outbound": round(share, 3), "total_outbound": total_bytes},
+                evidence={
+                    "bytes": bytes_,
+                    "share_of_outbound": round(share, 3),
+                    "total_outbound": total_bytes,
+                },
                 source_ip=host,
                 explanation=(
                     f"Host {host} accounts for {share * 100:.0f}% of outbound traffic "
@@ -553,11 +565,19 @@ def rule_arp_spoofing(parsed: ParsedCapture) -> list[RuleResult]:
         if len(macs) < 2:
             continue
         reasons = [
-            _reason("IP claimed by multiple MACs", f"{ip} announced by {len(macs)} MACs: {', '.join(sorted(macs))}", 45),
+            _reason(
+                "IP claimed by multiple MACs",
+                f"{ip} announced by {len(macs)} MACs: {', '.join(sorted(macs))}",
+                45,
+            ),
         ]
         score = 70
         if gratuitous > 0:
-            reasons.append(_reason("Gratuitous ARP announcements", f"{gratuitous} ARP packets announcing own mapping", 15))
+            reasons.append(
+                _reason(
+                    "Gratuitous ARP announcements", f"{gratuitous} ARP packets announcing own mapping", 15
+                )
+            )
             score = _clamp(score + 10)
         all_refs = []
         for mac in sorted(macs):
@@ -598,9 +618,7 @@ def rule_lateral_movement(flows: list[dict]) -> list[RuleResult]:
         if not (is_private_ip(f["source_ip"]) and is_private_ip(f["destination_ip"])):
             continue
         s = by_src[f["source_ip"]]
-        s["targets"].setdefault(
-            f["destination_ip"], {"ports": set(), "successful": 0, "failed": 0}
-        )
+        s["targets"].setdefault(f["destination_ip"], {"ports": set(), "successful": 0, "failed": 0})
         t = s["targets"][f["destination_ip"]]
         t["ports"].add(f["destination_port"])
         t["successful" if not f["failed"] else "failed"] += 1
@@ -615,11 +633,19 @@ def rule_lateral_movement(flows: list[dict]) -> list[RuleResult]:
         successful_targets = sum(1 for t in s["targets"].values() if t["successful"] > 0)
         reasons = [
             _reason("Internal fan-out", f"{src} touched {n_targets} internal hosts", 35),
-            _reason("Admin/administrative ports", f"ports {admin_ports} ({', '.join(LATERAL_MOVE_PORTS.get(p, str(p)) for p in admin_ports[:4])})", 30),
+            _reason(
+                "Admin/administrative ports",
+                f"ports {admin_ports} ({', '.join(LATERAL_MOVE_PORTS.get(p, str(p)) for p in admin_ports[:4])})",
+                30,
+            ),
         ]
         score = 40 + min(n_targets, 10) * 4
         if successful_targets >= 2:
-            reasons.append(_reason("Successful connections", f"{successful_targets} targets answered — access achieved", 20))
+            reasons.append(
+                _reason(
+                    "Successful connections", f"{successful_targets} targets answered — access achieved", 20
+                )
+            )
             score += 15
         results.append(
             RuleResult(
@@ -669,21 +695,20 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
 
     def _readable(name: str) -> bool:
         """Heuristic: readable SLDs have vowels breaking up consonant runs."""
-        return max(
-            (len(m.group()) for m in re.finditer(r"[bcdfghjklmnpqrstvwxz]{4,}", name.lower())),
-            default=0,
-        ) < 4
+        return (
+            max(
+                (len(m.group()) for m in re.finditer(r"[bcdfghjklmnpqrstvwxz]{4,}", name.lower())),
+                default=0,
+            )
+            < 4
+        )
 
-    baseline_pool = sorted(
-        _shannon_entropy(_sld(d)) for d in all_domains if _readable(d)
-    )
+    baseline_pool = sorted(_shannon_entropy(_sld(d)) for d in all_domains if _readable(d))
     if len(baseline_pool) < 5:
         return []  # not enough readable traffic to establish a baseline
     baseline = baseline_pool[len(baseline_pool) // 2]
 
-    by_client: dict[str, dict] = defaultdict(
-        lambda: {"domains": [], "high_entropy": [], "nx": 0}
-    )
+    by_client: dict[str, dict] = defaultdict(lambda: {"domains": [], "high_entropy": [], "nx": 0})
     for t in dns_txns:
         name = (t.get("query_name") or "").rstrip(".")
         if not name:
@@ -692,7 +717,9 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
         c["domains"].append(name)
         e = _shannon_entropy(_sld(name))
         # DGA markers: high entropy vs baseline AND long AND no vowels-rhythm (consonant runs)
-        consonant_run = max((len(m.group()) for m in re.finditer(r"[bcdfghjklmnpqrstvwxz]{4,}", name.lower())), default=0)
+        consonant_run = max(
+            (len(m.group()) for m in re.finditer(r"[bcdfghjklmnpqrstvwxz]{4,}", name.lower())), default=0
+        )
         if e > max(3.2, baseline + 0.6) and len(_sld(name)) >= 8 and consonant_run >= 4:
             c["high_entropy"].append((name, round(e, 2)))
         if t.get("rcode") == 3:
@@ -704,12 +731,22 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
         if n_hi < 5:
             continue
         reasons = [
-            _reason("High-entropy domains", f"{n_hi} domains with entropy well above baseline ({baseline:.2f})", 40),
+            _reason(
+                "High-entropy domains",
+                f"{n_hi} domains with entropy well above baseline ({baseline:.2f})",
+                40,
+            ),
             _reason("Dictionary-less labels", "long consonant runs, no readable words", 20),
         ]
         score = 45 + min(n_hi, 20) * 2
         if d["nx"] >= 5:
-            reasons.append(_reason("Many NXDOMAIN replies", f"{d['nx']} domains failed to resolve (typical of DGA rotation)", 20))
+            reasons.append(
+                _reason(
+                    "Many NXDOMAIN replies",
+                    f"{d['nx']} domains failed to resolve (typical of DGA rotation)",
+                    20,
+                )
+            )
             score += 10
         results.append(
             RuleResult(
@@ -727,8 +764,7 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
                 },
                 source_ip=client,
                 related_packet_refs=[
-                    t["packet_ref"] for t in dns_txns
-                    if t["client_ip"] == client and t.get("query_name")
+                    t["packet_ref"] for t in dns_txns if t["client_ip"] == client and t.get("query_name")
                 ][:50],
                 explanation=(
                     f"Host {client} looked up {n_hi} high-entropy, dictionary-less domains "
@@ -770,10 +806,16 @@ def rule_data_exfiltration(flows: list[dict], dns_txns: list[dict]) -> list[Rule
         reasons = []
         score = 0
         if baseline > 0 and bytes_ > baseline * 20:
-            reasons.append(_reason("Volume far above baseline", f"{bytes_} bytes vs median {baseline} per destination", 35))
+            reasons.append(
+                _reason(
+                    "Volume far above baseline", f"{bytes_} bytes vs median {baseline} per destination", 35
+                )
+            )
             score += 35
         if dst not in resolved:
-            reasons.append(_reason("First-contact destination", f"{dst} never resolved via DNS in this capture", 25))
+            reasons.append(
+                _reason("First-contact destination", f"{dst} never resolved via DNS in this capture", 25)
+            )
             score += 25
         duration = max(f["last_seen"] - f["first_seen"] for f in d["flows"])
         if duration < 30:
@@ -830,12 +872,14 @@ def rule_low_slow_beaconing(flows: list[dict]) -> list[RuleResult]:
         if mean < 60:  # rule_beaconing territory (< 60s); here we want long intervals
             continue
         variance = sum((i - mean) ** 2 for i in intervals) / len(intervals)
-        std = variance ** 0.5
+        std = variance**0.5
         if mean <= 0 or std / mean > 0.2:  # allow more jitter than fast beaconing
             continue
 
         reasons = [
-            _reason("Long-interval periodicity", f"{len(times)} connections at ~{mean / 60:.0f}min intervals", 40),
+            _reason(
+                "Long-interval periodicity", f"{len(times)} connections at ~{mean / 60:.0f}min intervals", 40
+            ),
             _reason("Low and slow cadence", "few, spread-out check-ins designed to evade rate alerts", 25),
             _reason("Repeated destination", f"{dst}:{dport} contacted {len(group)} times", 20),
         ]
@@ -890,7 +934,9 @@ def rule_suspicious_user_agent(http_txns: list[dict]) -> list[RuleResult]:
                 severity=_severity_for(score),
                 score=int(score),
                 reasons=[
-                    _reason("Tool/malware UA fingerprint", f"{len(txns)} requests with UA matching {label}", 40),
+                    _reason(
+                        "Tool/malware UA fingerprint", f"{len(txns)} requests with UA matching {label}", 40
+                    ),
                     _reason("Sample UA", f'"{ua_sample}"', 15),
                 ],
                 evidence={
@@ -989,9 +1035,7 @@ class SuspicionEngine:
         """id_by_flow: optional mapping to REAL persisted flow ids (by object identity)."""
         # tag each flow dict with its persisted id so rules can cross-reference
         for i, f in enumerate(flows):
-            f["_alert_flow_id"] = (
-                id_by_flow.get(id(f)) if id_by_flow else None
-            ) or f"flowidx-{i}"
+            f["_alert_flow_id"] = (id_by_flow.get(id(f)) if id_by_flow else None) or f"flowidx-{i}"
 
         results: list[RuleResult] = []
         results += rule_port_scan(flows)
@@ -1014,11 +1058,9 @@ class SuspicionEngine:
         alert_dicts = []
         for r in results:
             d = r.to_dict()
-            first_flow = next(
-                (f for f in flows if f["_alert_flow_id"] in (r.related_flow_ids or [])), None
-            )
-            d["timestamp"] = first_flow["first_seen"] if first_flow else (
-                dns_txns[0]["timestamp"] if dns_txns else None
+            first_flow = next((f for f in flows if f["_alert_flow_id"] in (r.related_flow_ids or [])), None)
+            d["timestamp"] = (
+                first_flow["first_seen"] if first_flow else (dns_txns[0]["timestamp"] if dns_txns else None)
             )
             alert_dicts.append(d)
         alert_dicts.sort(key=lambda a: -a["score"])

@@ -21,6 +21,8 @@ test-data/synthetic/*.pcapng
 # Env
 .env
 .env.*
+# ...but ship the template so the setup script can seed a fresh checkout
+!.env.example
 
 # IDE
 .vscode/
@@ -30,3 +32,5 @@ test-data/synthetic/*.pcapng
 frontend/test-results/
 frontend/playwright-report/
 frontend/.playwright/
+# Saved auth storage states (contain session cookies)
+frontend/.auth/

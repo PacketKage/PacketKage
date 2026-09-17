@@ -1,9 +1,11 @@
 """Case endpoints — group related captures into one investigation."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import require_admin
 from app.core.database import get_db
 from app.db.orm import CaptureModel, CaseModel
 from app.repositories import (
@@ -126,7 +128,12 @@ def close_case(case_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{case_id}", response_model=dict)
-def delete_case(case_id: str, db: Session = Depends(get_db)):
+def delete_case(
+    case_id: str,
+    admin: None = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete a case permanently — administration-only (403 for analysts)."""
     _case_or_404(db, case_id)
     CaseRepository(db).delete(case_id)
     return {"detail": "deleted"}

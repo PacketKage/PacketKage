@@ -1,4 +1,5 @@
 """Host + protocol endpoints: hosts list/detail, DNS/HTTP/TLS transactions, protocol stats."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -112,9 +113,7 @@ def list_tls(
     db: Session = Depends(get_db),
 ):
     capture_or_404(db, capture_id)
-    sessions, total = TLSRepository(db).page_for_capture(
-        capture_id, limit=limit, offset=offset, sni=sni
-    )
+    sessions, total = TLSRepository(db).page_for_capture(capture_id, limit=limit, offset=offset, sni=sni)
     return Page.of(
         [TLSSessionOut.model_validate(s) for s in sessions],
         total=total,

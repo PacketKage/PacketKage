@@ -1,4 +1,5 @@
 """Step 5 tests: timeline, graph, replay."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -57,10 +58,7 @@ def test_timeline_filters_host(client):
     capture_id = _analyze(client, "normal_traffic.pcap")
     # filter by source ip
     events = client.get(f"/api/timeline?capture_id={capture_id}&host=192.168.1.42&limit=1000").json()["items"]
-    assert all(
-        (e["source_ip"] == "192.168.1.42" or e["destination_ip"] == "192.168.1.42")
-        for e in events
-    )
+    assert all((e["source_ip"] == "192.168.1.42" or e["destination_ip"] == "192.168.1.42") for e in events)
     # filter by domain
     events = client.get(f"/api/timeline?capture_id={capture_id}&host=github&limit=1000").json()["items"]
     assert all(e["domain"] and "github" in e["domain"].lower() for e in events)
@@ -81,7 +79,9 @@ def test_timeline_filters_protocol_type_severity_time(client):
     # time window: first 60s covers first two beacons
     all_events = client.get(f"/api/timeline?capture_id={capture_id}&limit=1000").json()["items"]
     t0 = all_events[0]["timestamp"]
-    events = client.get(f"/api/timeline?capture_id={capture_id}&after={t0}&before={t0 + 60}&limit=1000").json()["items"]
+    events = client.get(
+        f"/api/timeline?capture_id={capture_id}&after={t0}&before={t0 + 60}&limit=1000"
+    ).json()["items"]
     assert all(t0 <= e["timestamp"] <= t0 + 60 for e in events)
     assert len(events) < len(all_events)
 
@@ -139,8 +139,7 @@ def test_graph_edge_aggregation(client):
     graph = client.get(f"/api/graph?capture_id={capture_id}").json()
     # 40 beacon flows between the same pair aggregate into ONE edge with count=40
     edge = next(
-        e for e in graph["edges"]
-        if e["data"]["source"] == "192.168.1.42" and e["data"]["type"] != "EXPOSES"
+        e for e in graph["edges"] if e["data"]["source"] == "192.168.1.42" and e["data"]["type"] != "EXPOSES"
     )
     assert edge["data"]["count"] == 40
     assert edge["data"]["packets"] == 120  # 40 * 3

@@ -1,4 +1,5 @@
 """SQLAlchemy engine/session management (SQLite first, extensible later)."""
+
 from __future__ import annotations
 
 import time
@@ -50,9 +51,7 @@ def _snapshot_pending(session: Session) -> tuple[list, dict[int, dict], set[int]
     pinned = list(session.new | session.dirty | session.deleted)
     attrs: dict[int, dict] = {}
     for obj in session.new | session.dirty:
-        attrs[id(obj)] = {
-            k: v for k, v in obj.__dict__.items() if not k.startswith("_sa_")
-        }
+        attrs[id(obj)] = {k: v for k, v in obj.__dict__.items() if not k.startswith("_sa_")}
     deleted_ids = {id(o) for o in session.deleted}
     return pinned, attrs, deleted_ids
 
@@ -139,9 +138,7 @@ def make_engine(url: str | None = None) -> Engine:
 
 
 engine = make_engine()
-SessionLocal = sessionmaker(
-    bind=engine, autoflush=False, expire_on_commit=False, class_=RetryingSession
-)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, class_=RetryingSession)
 
 
 def get_db() -> Generator[Session, None, None]:

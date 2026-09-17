@@ -10,6 +10,9 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { Spinner } from './components/ui'
 import { Dashboard } from './pages/Dashboard'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { SetupPage } from './pages/SetupPage'
+import { AuthProvider } from './auth/AuthContext'
+import { RequireAdmin, RequireAuth } from './auth/guards'
 
 // Route-level code splitting: heavy deps (recharts/cytoscape/table) only load with their page
 const CapturePage = lazy(() =>
@@ -42,6 +45,7 @@ const ReplayPage = lazy(() =>
 const EngineerPage = lazy(() =>
   import('./pages/EngineerPage').then((m) => ({ default: m.EngineerPage })),
 )
+const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,19 +63,32 @@ function PageFallback() {
 
 const router = createBrowserRouter([
   {
+    // First-run setup / reconfiguration without the app chrome. RequireAuth
+    // routes unconfigured visitors here anyway; this is the deep-link entry.
+    path: '/setup',
+    element: (
+      <ErrorBoundary>
+        <RequireAuth>
+          <SetupPage />
+        </RequireAuth>
+      </ErrorBoundary>
+    ),
+  },
+  {
     element: <Layout />,
     children: [
-      { path: '/', element: <Dashboard /> },
-      { path: '/capture', element: <CapturePage /> },
-      { path: '/flows', element: <FlowsPage /> },
-      { path: '/hosts', element: <HostsPage /> },
-      { path: '/protocol', element: <ProtocolPage /> },
-      { path: '/alerts', element: <AlertsPage /> },
-      { path: '/cases', element: <CasesPage /> },
-      { path: '/timeline', element: <TimelinePage /> },
-      { path: '/graph', element: <GraphPage /> },
-      { path: '/replay', element: <ReplayPage /> },
-      { path: '/engineer', element: <EngineerPage /> },
+      { path: '/', element: <RequireAuth><Dashboard /></RequireAuth> },
+      { path: '/capture', element: <RequireAuth><CapturePage /></RequireAuth> },
+      { path: '/flows', element: <RequireAuth><FlowsPage /></RequireAuth> },
+      { path: '/hosts', element: <RequireAuth><HostsPage /></RequireAuth> },
+      { path: '/protocol', element: <RequireAuth><ProtocolPage /></RequireAuth> },
+      { path: '/alerts', element: <RequireAuth><AlertsPage /></RequireAuth> },
+      { path: '/cases', element: <RequireAuth><CasesPage /></RequireAuth> },
+      { path: '/timeline', element: <RequireAuth><TimelinePage /></RequireAuth> },
+      { path: '/graph', element: <RequireAuth><GraphPage /></RequireAuth> },
+      { path: '/replay', element: <RequireAuth><ReplayPage /></RequireAuth> },
+      { path: '/engineer', element: <RequireAuth><EngineerPage /></RequireAuth> },
+      { path: '/admin', element: <RequireAdmin><AdminPage /></RequireAdmin> },
       { path: '*', element: <NotFoundPage /> },
     ].map((route) => ({
       ...route,
@@ -87,7 +104,9 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -5,6 +5,7 @@ capped so the graph can never become an unbounded database operation.
 Authorization model: same as the rest of PacketKage's API — single-tenant,
 no per-user auth (documented assumption; all data is scoped by capture_id).
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -59,12 +60,8 @@ def _edge_out(e) -> GraphV2Edge:
 @router.get("", response_model=GraphV2Out)
 def get_evidence_graph(
     capture_id: str,
-    relationships: str | None = Query(
-        default=None, description="Comma-separated relationship types"
-    ),
-    provenance: str | None = Query(
-        default=None, description="Comma-separated provenance classes"
-    ),
+    relationships: str | None = Query(default=None, description="Comma-separated relationship types"),
+    provenance: str | None = Query(default=None, description="Comma-separated provenance classes"),
     after: float | None = Query(default=None, description="Window start (epoch s)"),
     before: float | None = Query(default=None, description="Window end (epoch s)"),
     min_alerts: int = Query(default=0, ge=0, description="Only alert-backed edges"),
@@ -243,10 +240,7 @@ def get_edge_detail(edge_id: str, capture_id: str, db: Session = Depends(get_db)
     out = _edge_out(e)
 
     if e.flow_ids:
-        flow_rows = {
-            f.id: f
-            for f in db.query(FlowModel).filter(FlowModel.id.in_(e.flow_ids)).all()
-        }
+        flow_rows = {f.id: f for f in db.query(FlowModel).filter(FlowModel.id.in_(e.flow_ids)).all()}
         out.flows = [
             {
                 "id": fid,
@@ -264,10 +258,7 @@ def get_edge_detail(edge_id: str, capture_id: str, db: Session = Depends(get_db)
             if fid in flow_rows
         ]
     if e.alert_ids:
-        alert_rows = {
-            a.id: a
-            for a in db.query(AlertModel).filter(AlertModel.id.in_(e.alert_ids)).all()
-        }
+        alert_rows = {a.id: a for a in db.query(AlertModel).filter(AlertModel.id.in_(e.alert_ids)).all()}
         from app.services.evidence_graph import RULE_MITRE
 
         out.alerts = [
@@ -307,10 +298,7 @@ def get_attack_paths(
     capture_or_404(db, capture_id)
 
     result = find_attack_paths(db, capture_id, source, target, max_depth, max_paths)
-    paths = [
-        GraphV2Path(nodes=p["nodes"], length=p["length"])
-        for p in result["paths"]
-    ]
+    paths = [GraphV2Path(nodes=p["nodes"], length=p["length"]) for p in result["paths"]]
     return GraphV2PathsOut(
         paths=paths,
         visited=result["visited"],

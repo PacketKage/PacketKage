@@ -1,4 +1,5 @@
 """API request/response schemas (separate from ORM + internal models)."""
+
 from __future__ import annotations
 
 from datetime import datetime

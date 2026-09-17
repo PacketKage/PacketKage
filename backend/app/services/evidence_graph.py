@@ -23,6 +23,7 @@ Provenance classes:
 Nothing here invents evidence: if an edge has no alert evidence, its
 explanation is None; if a technique has no matching rule, it is not shown.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
@@ -325,34 +326,20 @@ class EvidenceGraphBuilder:
                 edges[key] = _EdgeAcc(provenance=provenance)
             return edges[key]
 
-        flows = list(
-            self.db.scalars(
-                select(FlowModel).where(FlowModel.capture_id == cap_id)
-            )
-        )
+        flows = list(self.db.scalars(select(FlowModel).where(FlowModel.capture_id == cap_id)))
         dns_txns = list(
-            self.db.scalars(
-                select(DNSTransactionModel).where(DNSTransactionModel.capture_id == cap_id)
-            )
+            self.db.scalars(select(DNSTransactionModel).where(DNSTransactionModel.capture_id == cap_id))
         )
         tls_sessions = list(
-            self.db.scalars(
-                select(TLSSessionModel).where(TLSSessionModel.capture_id == cap_id)
-            )
+            self.db.scalars(select(TLSSessionModel).where(TLSSessionModel.capture_id == cap_id))
         )
         http_txns = list(
-            self.db.scalars(
-                select(HTTPTransactionModel).where(HTTPTransactionModel.capture_id == cap_id)
-            )
+            self.db.scalars(select(HTTPTransactionModel).where(HTTPTransactionModel.capture_id == cap_id))
         )
-        hosts = list(
-            self.db.scalars(select(HostModel).where(HostModel.capture_id == cap_id))
-        )
+        hosts = list(self.db.scalars(select(HostModel).where(HostModel.capture_id == cap_id)))
         alerts = list(
             self.db.scalars(
-                select(AlertModel)
-                .where(AlertModel.capture_id == cap_id)
-                .order_by(AlertModel.score.desc())
+                select(AlertModel).where(AlertModel.capture_id == cap_id).order_by(AlertModel.score.desc())
             )
         )
         alert_by_pair = self._alert_context(cap_id)
@@ -471,9 +458,7 @@ class EvidenceGraphBuilder:
                 e.last_seen = max(e.last_seen or 0.0, float(incident["last_seen"]))
 
         # 8) Case edges (case → capture) — cases that include this capture
-        case_rows = list(
-            self.db.scalars(select(CaseModel).order_by(CaseModel.created_at.desc()).limit(500))
-        )
+        case_rows = list(self.db.scalars(select(CaseModel).order_by(CaseModel.created_at.desc()).limit(500)))
         for c in case_rows:
             if cap_id in (c.capture_ids or []):
                 e = acc(case_id(c.id), capture_id(cap_id), "INCLUDES", provenance="correlated")
@@ -529,9 +514,7 @@ def ensure_materialized(db: Session, capture: CaptureModel) -> bool:
     first /api/graph/v2 request, transparently and exactly once.
     """
     existing = db.scalar(
-        select(func.count())
-        .select_from(GraphEdgeModel)
-        .where(GraphEdgeModel.capture_id == capture.id)
+        select(func.count()).select_from(GraphEdgeModel).where(GraphEdgeModel.capture_id == capture.id)
     )
     if existing:
         return False
@@ -546,9 +529,7 @@ def ensure_materialized(db: Session, capture: CaptureModel) -> bool:
 # ---- Node hydration (query time, from source tables — no duplication) -------
 
 
-def hydrate_node(
-    capture_id: str, node_id: str, db: Session, referenced: bool = False
-) -> dict | None:
+def hydrate_node(capture_id: str, node_id: str, db: Session, referenced: bool = False) -> dict | None:
     """Node metadata from the table that actually owns the data. None if unknown.
 
     ``referenced=True`` means the node id is known to appear in a graph edge
@@ -560,11 +541,7 @@ def hydrate_node(
     kind, key = parse_node_id(node_id)
 
     if kind == "host":
-        host = db.scalar(
-            select(HostModel).where(
-                HostModel.capture_id == capture_id, HostModel.ip == key
-            )
-        )
+        host = db.scalar(select(HostModel).where(HostModel.capture_id == capture_id, HostModel.ip == key))
         if host is None:
             if not referenced:
                 return None
@@ -597,35 +574,39 @@ def hydrate_node(
             # unknown-domain lookups must 404: verify the name was actually
             # observed in this capture (DNS query, TLS SNI, or HTTP host)
             seen = (
-                db.scalar(
-                    select(func.count())
-                    .select_from(DNSTransactionModel)
-                    .where(
-                        DNSTransactionModel.capture_id == capture_id,
-                        DNSTransactionModel.query_name == key,
+                (
+                    db.scalar(
+                        select(func.count())
+                        .select_from(DNSTransactionModel)
+                        .where(
+                            DNSTransactionModel.capture_id == capture_id,
+                            DNSTransactionModel.query_name == key,
+                        )
                     )
+                    or 0
                 )
-                or 0
-            ) or (
-                db.scalar(
-                    select(func.count())
-                    .select_from(TLSSessionModel)
-                    .where(
-                        TLSSessionModel.capture_id == capture_id,
-                        TLSSessionModel.sni == key,
+                or (
+                    db.scalar(
+                        select(func.count())
+                        .select_from(TLSSessionModel)
+                        .where(
+                            TLSSessionModel.capture_id == capture_id,
+                            TLSSessionModel.sni == key,
+                        )
                     )
+                    or 0
                 )
-                or 0
-            ) or (
-                db.scalar(
-                    select(func.count())
-                    .select_from(HTTPTransactionModel)
-                    .where(
-                        HTTPTransactionModel.capture_id == capture_id,
-                        HTTPTransactionModel.host == key,
+                or (
+                    db.scalar(
+                        select(func.count())
+                        .select_from(HTTPTransactionModel)
+                        .where(
+                            HTTPTransactionModel.capture_id == capture_id,
+                            HTTPTransactionModel.host == key,
+                        )
                     )
+                    or 0
                 )
-                or 0
             )
             if not seen:
                 return None
@@ -738,7 +719,9 @@ def find_attack_paths(
 
     # bounded BFS collecting simple paths up to max_depth
     visited_total = 0
-    paths: list[dict] = []  # each path: {"nodes": [...], "hops": [{"source", "target", "relationship", "provenance"}]}
+    paths: list[
+        dict
+    ] = []  # each path: {"nodes": [...], "hops": [{"source", "target", "relationship", "provenance"}]}
     queue: deque[tuple[str, list[str], list[dict]]] = deque([(source_node, [source_node], [])])
     seen_depth: dict[str, int] = {source_node: 0}
     truncated = False
@@ -755,12 +738,14 @@ def find_attack_paths(
             if neighbor in path:  # simple paths only
                 continue
             new_path = path + [neighbor]
-            new_hops = hops + [{
-                "source": edge.source_id,
-                "target": edge.target_id,
-                "relationship": edge.relationship,
-                "provenance": edge.provenance,
-            }]
+            new_hops = hops + [
+                {
+                    "source": edge.source_id,
+                    "target": edge.target_id,
+                    "relationship": edge.relationship,
+                    "provenance": edge.provenance,
+                }
+            ]
             if neighbor == target_node:
                 paths.append({"nodes": new_path, "hops": new_hops, "length": len(new_path) - 1})
                 if len(paths) >= max_paths:
@@ -769,9 +754,7 @@ def find_attack_paths(
             # keep exploring (cheaper best-effort ordering: shorter depth first)
             if len(new_path) - 1 < max_depth:
                 prev = seen_depth.get(neighbor)
-                if (prev is None or len(new_path) - 1 < prev) and (
-                    visited_total + len(queue) < node_cap * 2
-                ):
+                if (prev is None or len(new_path) - 1 < prev) and (visited_total + len(queue) < node_cap * 2):
                     seen_depth[neighbor] = len(new_path) - 1
                     queue.append((neighbor, new_path, new_hops))
 

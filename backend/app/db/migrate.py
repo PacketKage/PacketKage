@@ -5,6 +5,7 @@ existing ones. This helper adds any missing COLUMNS to existing tables so
 older local databases keep working across upgrades (dev-tool friendly,
 no Alembic needed at this scale).
 """
+
 from __future__ import annotations
 
 import sqlite3

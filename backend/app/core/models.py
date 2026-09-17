@@ -3,6 +3,7 @@
 Parser-specific objects (Scapy packets, TShark JSON) never leave the parser layer.
 Everything downstream works with these normalized structures.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -22,7 +23,9 @@ class NormalizedPacket:
     destination_port: int | None = None
     length: int = 0
     flags: list[str] = field(default_factory=list)  # e.g. ["SYN", "ACK"]
-    metadata: dict[str, Any] = field(default_factory=dict)  # protocol hints (dns.query, http.host, tls.sni, ...)
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )  # protocol hints (dns.query, http.host, tls.sni, ...)
     packet_reference: int = 0  # index/ordinal in capture for later evidence drill-down
 
 

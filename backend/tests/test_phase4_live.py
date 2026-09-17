@@ -3,6 +3,7 @@
 Also includes one REAL end-to-end live test (lo interface, 4 pings) that
 skips itself when sniffing isn't permitted (non-root CI).
 """
+
 from __future__ import annotations
 
 import time
@@ -164,15 +165,11 @@ def test_live_api_endpoints(monkeypatch, client):
     import app.services.live_capture as lc_mod  # the module the running app uses
 
     sniffer = FakeSniffer("lo", None)
-    fresh_manager = lc_mod.LiveCaptureManager(
-        sniffer_factory=lambda i, b, max_packets=0: sniffer
-    )
+    fresh_manager = lc_mod.LiveCaptureManager(sniffer_factory=lambda i, b, max_packets=0: sniffer)
     import app.api.live as live_mod
 
     monkeypatch.setattr(live_mod, "live_manager", fresh_manager)
-    monkeypatch.setattr(
-        lc_mod.LiveCaptureManager, "interfaces", staticmethod(lambda: ["lo"])
-    )
+    monkeypatch.setattr(lc_mod.LiveCaptureManager, "interfaces", staticmethod(lambda: ["lo"]))
 
     # interfaces listing
     ifaces = client.get("/api/live/interfaces").json()

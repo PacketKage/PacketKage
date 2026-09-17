@@ -1,4 +1,5 @@
 """Flow endpoints: paginated flow list, flow detail with packet evidence."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -35,9 +36,7 @@ def list_flows(
         sort=sort,
         order=order,
     )
-    return Page.of(
-        [FlowOut.model_validate(f) for f in flows], total=total, offset=offset, limit=limit
-    )
+    return Page.of([FlowOut.model_validate(f) for f in flows], total=total, offset=offset, limit=limit)
 
 
 @router.get("/{flow_id}", response_model=FlowDetailOut)

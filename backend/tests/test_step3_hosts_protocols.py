@@ -1,4 +1,5 @@
 """Step 3 tests: host profiling + protocol extraction (DNS/HTTP/TLS)."""
+
 from __future__ import annotations
 
 from tests.conftest import TESTDATA

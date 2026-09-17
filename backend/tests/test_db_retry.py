@@ -5,6 +5,7 @@ fails fast (deterministic) instead of the production 5s wait. The lock is
 held by a raw sqlite3 connection doing BEGIN IMMEDIATE — with WAL enabled
 readers still work, only writers block, mirroring production semantics.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -46,9 +47,7 @@ def retry_env():
         dbapi_con.execute("pragma busy_timeout=20")  # ms — fail fast, like a >5s stall
 
     _RetryBase.metadata.create_all(eng)
-    factory = sessionmaker(
-        bind=eng, autoflush=False, expire_on_commit=False, class_=RetryingSession
-    )
+    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False, class_=RetryingSession)
     yield {"engine": eng, "factory": factory, "db_path": db_path}
     eng.dispose()
 

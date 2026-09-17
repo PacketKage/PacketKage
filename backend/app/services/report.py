@@ -4,6 +4,7 @@ Philosophy: the report must stand alone. A reader with no access to
 PacketKage should understand what happened, why we believe it, and where
 the evidence is. All styles inline; zero external assets or dependencies.
 """
+
 from __future__ import annotations
 
 import html
@@ -138,11 +139,7 @@ def build_report(db: Session, capture: CaptureModel) -> str:
             f"<li><b>{_esc(r.get('reason', ''))}</b> — {_esc(r.get('detail', ''))}</li>"
             for r in (a.reasons or [])
         )
-        note_html = (
-            f"<div class='explanation'><b>Analyst note:</b> {_esc(a.note)}</div>"
-            if a.note
-            else ""
-        )
+        note_html = f"<div class='explanation'><b>Analyst note:</b> {_esc(a.note)}</div>" if a.note else ""
         tags_html = (
             " ".join(f"<span class='sev' style='background:#475569'>{_esc(t)}</span>" for t in a.tags)
             if a.tags
@@ -180,9 +177,7 @@ def build_report(db: Session, capture: CaptureModel) -> str:
     highlights = [e for e in events if e.event_type in highlight_types][:25]
     parts.append("<h2>Timeline Highlights</h2>")
     if highlights:
-        parts.append(
-            "<table><tr><th>Time</th><th>Event</th><th>Type</th><th>Severity</th></tr>"
-        )
+        parts.append("<table><tr><th>Time</th><th>Event</th><th>Type</th><th>Severity</th></tr>")
         for e in highlights:
             ts = datetime.fromtimestamp(e.timestamp, tz=UTC).strftime("%H:%M:%S")
             parts.append(

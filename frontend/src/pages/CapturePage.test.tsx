@@ -4,7 +4,14 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { CapturePage } from './CapturePage'
 import { captureFixture } from '../test/fixtures'
-import { renderPage, seededQueryClient } from '../test/harness'
+import {
+  adminUser,
+  analystUser,
+  authValue,
+  renderPage,
+  seededQueryClient,
+  TestAuthProvider,
+} from '../test/harness'
 import type { Capture } from '../types/api'
 
 type CaptureRow = Capture
@@ -19,6 +26,7 @@ afterEach(cleanup)
 function seed(captures = [captureFixture()]) {
   return renderPage(<CapturePage />, {
     initialEntries: ['/capture'],
+    auth: authValue(adminUser()),
     queries: [
       { queryKey: ['captures'], data: captures },
       { queryKey: ['parsers'], data: { scapy: true } },
@@ -44,6 +52,20 @@ describe('CapturePage', () => {
     expect(screen.getByRole('button', { name: 'scapy' })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'tshark' })).toBeNull()
     expect(screen.getByText(/available: scapy/)).toBeDefined()
+  })
+
+  it('hides the delete affordance for analysts (admin-only operation)', () => {
+    renderPage(<CapturePage />, {
+      initialEntries: ['/capture'],
+      auth: authValue(analystUser()),
+      queries: [
+        { queryKey: ['captures'], data: [captureFixture()] },
+        { queryKey: ['parsers'], data: { scapy: true } },
+        { queryKey: ['liveInterfaces'], data: ['lo'] },
+        { queryKey: ['liveStatus'], data: null },
+      ],
+    })
+    expect(screen.queryByRole('button', { name: 'Delete capture c2_beacon.pcap' })).toBeNull()
   })
 
   it('switching parser selection updates the active button', () => {
@@ -244,14 +266,16 @@ describe('CapturePage', () => {
     })
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/capture']}>
-          <Routes>
-            <Route path="/" element={<CapturePage />} />
-            <Route path="*" element={<CapturePage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+      <TestAuthProvider value={authValue(adminUser())}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/capture']}>
+            <Routes>
+              <Route path="/" element={<CapturePage />} />
+              <Route path="*" element={<CapturePage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </TestAuthProvider>,
     )
 
     // open the confirmation modal
@@ -327,14 +351,16 @@ describe('CapturePage', () => {
     ])
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/capture']}>
-          <Routes>
-            <Route path="/" element={<CapturePage />} />
-            <Route path="*" element={<CapturePage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+      <TestAuthProvider value={authValue(adminUser())}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/capture']}>
+            <Routes>
+              <Route path="/" element={<CapturePage />} />
+              <Route path="*" element={<CapturePage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </TestAuthProvider>,
     )
 
     act(() => {

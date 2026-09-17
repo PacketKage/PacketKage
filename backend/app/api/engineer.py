@@ -1,4 +1,5 @@
 """Network Engineering Mode endpoint (Module G)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,8 +41,7 @@ def engineer_metrics(capture_id: str, db: Session = Depends(get_db)):
         for f in FlowRepository(db).list_for_capture(capture_id)
     ]
     dns_txns = [
-        {"latency": t.latency, "rcode": t.rcode}
-        for t in DNSRepository(db).list_for_capture(capture_id)
+        {"latency": t.latency, "rcode": t.rcode} for t in DNSRepository(db).list_for_capture(capture_id)
     ]
 
     metrics = compute_engineer_metrics(parsed, flows, dns_txns)

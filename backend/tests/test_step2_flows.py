@@ -1,4 +1,5 @@
 """Step 2 tests: flow reconstruction — aggregation, TCP states, evidence drill-down."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -130,6 +131,8 @@ def test_flow_detail_packet_evidence(client):
     )
     # first packet must be the SYN
     assert "SYN" in detail["packet_evidence"][0]["flags"]
+
+
 def test_flow_summary_in_capture(client):
     """Capture summary carries flow stats for the dashboard."""
     capture_id, flows = _flows_for(client, "tcp_problems.pcap")
@@ -188,14 +191,24 @@ def test_flow_builder_direct_unit():
 
     # packet in one direction then the reverse must aggregate into one flow
     fwd = NormalizedPacket(
-        timestamp=1.0, source_ip="10.0.0.1", destination_ip="10.0.0.2",
-        transport="TCP", source_port=1234, destination_port=80,
-        flags=["SYN"], packet_reference=0,
+        timestamp=1.0,
+        source_ip="10.0.0.1",
+        destination_ip="10.0.0.2",
+        transport="TCP",
+        source_port=1234,
+        destination_port=80,
+        flags=["SYN"],
+        packet_reference=0,
     )
     rev = NormalizedPacket(
-        timestamp=1.1, source_ip="10.0.0.2", destination_ip="10.0.0.1",
-        transport="TCP", source_port=80, destination_port=1234,
-        flags=["SYN", "ACK"], packet_reference=1,
+        timestamp=1.1,
+        source_ip="10.0.0.2",
+        destination_ip="10.0.0.1",
+        transport="TCP",
+        source_port=80,
+        destination_port=1234,
+        flags=["SYN", "ACK"],
+        packet_reference=1,
     )
     builder = FlowBuilder()
     builder.add_packet(fwd)

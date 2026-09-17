@@ -1,4 +1,5 @@
 """Phase 5 tests: cases, alert triage (tags/notes), and HTML report generation."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload

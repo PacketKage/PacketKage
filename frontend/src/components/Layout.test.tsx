@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter } from 'react-router-dom'
 import { Layout } from './Layout'
 import { Breadcrumbs } from './Breadcrumbs'
+import { adminUser, analystUser, authValue, TestAuthProvider } from '../test/harness'
 
 beforeEach(() => {
   try {
@@ -77,6 +78,35 @@ describe('Layout shell', () => {
   it('mounts the theme toggle in the topbar', () => {
     renderLayoutAt('/')
     expect(screen.getByRole('button', { name: /theme/ })).toBeDefined()
+  })
+
+  it('shows the Admin link (12 routes) and user chip for admins', () => {
+    render(
+      <TestAuthProvider value={authValue(adminUser())}>
+        <MemoryRouter initialEntries={['/']}>
+          <Layout />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+    const nav = screen.getByLabelText('Main navigation')
+    expect(nav.querySelectorAll('a').length).toBe(12)
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeDefined()
+    expect(screen.getByTitle('admin@packetkage.test')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeDefined()
+  })
+
+  it('hides the Admin link for analysts but still shows the user chip', () => {
+    render(
+      <TestAuthProvider value={authValue(analystUser())}>
+        <MemoryRouter initialEntries={['/']}>
+          <Layout />
+        </MemoryRouter>
+      </TestAuthProvider>,
+    )
+    const nav = screen.getByLabelText('Main navigation')
+    expect(nav.querySelectorAll('a').length).toBe(11)
+    expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull()
+    expect(screen.getByTitle('analyst@packetkage.test')).toBeDefined()
   })
 })
 

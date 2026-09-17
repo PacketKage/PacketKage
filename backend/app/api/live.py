@@ -1,4 +1,5 @@
 """Live capture endpoints: interface listing, start/status/stop."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

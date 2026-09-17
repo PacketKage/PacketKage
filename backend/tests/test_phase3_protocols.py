@@ -1,4 +1,5 @@
 """Phase 3 tests: IPv6 flows + direction, QUIC labeling, protocol banners, DHCP."""
+
 from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
@@ -48,9 +49,7 @@ def test_ipv6_flows_and_direction(client):
 
 def test_ipv6_dns_transaction(client):
     capture_id = _analyze(client, "ipv6_traffic.pcap")
-    dns = client.get(
-        f"/api/protocols/dns?capture_id={capture_id}"
-    ).json()["items"]
+    dns = client.get(f"/api/protocols/dns?capture_id={capture_id}").json()["items"]
     assert len(dns) == 1
     t = dns[0]
     assert t["client_ip"] == "fd00::42"
@@ -111,9 +110,7 @@ def test_protocol_banners_extracted(client):
     ssh_flow = next(f for f in flows if f["destination_port"] == 22)
     detail = client.get(f"/api/flows/{ssh_flow['id']}").json()
     banners = [
-        p["metadata"].get("ssh.banner")
-        for p in detail["packet_evidence"]
-        if p["metadata"].get("ssh.banner")
+        p["metadata"].get("ssh.banner") for p in detail["packet_evidence"] if p["metadata"].get("ssh.banner")
     ]
     assert banners, "SSH banner must be present in packet evidence"
     assert banners[0].startswith("SSH-2.0-OpenSSH")
@@ -136,9 +133,7 @@ def test_dhcp_lease_flow_and_hostname(client):
     assert client_host["hostname"] == "ws-laptop-01"
 
     # DHCP conversation appears in the timeline
-    events = client.get(
-        f"/api/timeline?capture_id={capture_id}&limit=1000"
-    ).json()["items"]
+    events = client.get(f"/api/timeline?capture_id={capture_id}&limit=1000").json()["items"]
     dhcp_events = [e for e in events if e["protocol"] == "DHCP"]
     assert len(dhcp_events) >= 2  # udp_session events typed DHCP
 

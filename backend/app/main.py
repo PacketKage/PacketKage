@@ -1,9 +1,11 @@
 """PacketKage FastAPI application entry point."""
+
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
@@ -18,9 +20,14 @@ from app.api import (
     live,
     timeline_graph,
 )
+from app.auth.dependencies import require_user
+from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.parsers import register_default_parsers
+from app.setup.router import router as setup_router
+
+logger = logging.getLogger("packetkage.setup")
 
 
 @asynccontextmanager
@@ -32,7 +39,26 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     _recover_interrupted_jobs()
     register_default_parsers()
+    _announce_setup_if_unconfigured()
     yield
+
+
+def _announce_setup_if_unconfigured() -> None:
+    """Log the first-run bootstrap token when no OIDC provider is configured.
+
+    The setup wizard is reachable from loopback without a token; a container
+    published on a non-loopback address needs the token printed here (and
+    written to ``<data>/setup-token``).
+    """
+    if settings.auth_enabled:
+        return
+    from app.setup.token import bootstrap_token
+
+    logger.warning(
+        "Authentication is not configured. Open /setup and connect an OIDC provider. "
+        "Bootstrap token (required for non-loopback access): %s",
+        bootstrap_token(),
+    )
 
 
 def _recover_interrupted_jobs() -> None:
@@ -77,16 +103,32 @@ if settings.enable_cors:
         allow_headers=["*"],
     )
 
-app.include_router(captures.router)
-app.include_router(jobs.router)
-app.include_router(flows.router)
-app.include_router(hosts_protocols.router)
-app.include_router(alerts.router)
-app.include_router(timeline_graph.router)
-app.include_router(evidence_graph.router)
-app.include_router(engineer.router)
-app.include_router(live.router)
-app.include_router(cases.router)
+
+def _include_product_router(router) -> None:
+    """Every PacketKage API router requires an authenticated session.
+
+    Only the health endpoint and the OIDC front-channel (login/callback) and
+    auth-router self-describing routes stay public; anything added here is
+    automatically protected (enforced again by test_auth.py over OpenAPI).
+    """
+    app.include_router(router, dependencies=[Depends(require_user)])
+
+
+_include_product_router(captures.router)
+_include_product_router(jobs.router)
+_include_product_router(flows.router)
+_include_product_router(hosts_protocols.router)
+_include_product_router(alerts.router)
+_include_product_router(timeline_graph.router)
+_include_product_router(evidence_graph.router)
+_include_product_router(engineer.router)
+_include_product_router(live.router)
+_include_product_router(cases.router)
+app.include_router(auth_router)
+# First-run setup / reconfiguration. Mounted without the product-API auth gate:
+# while unconfigured there is no session to require, so the router enforces its
+# own loopback / bootstrap-token / admin guard (see app.setup.dependencies).
+app.include_router(setup_router)
 
 
 @app.get("/api/health")
@@ -121,8 +163,11 @@ def _mount_spa() -> None:
             candidate = (spa_dir / full_path).resolve()
         except OSError:
             candidate = None
-        if candidate is not None and full_path and candidate.is_file() and candidate.is_relative_to(
-            spa_dir.resolve()
+        if (
+            candidate is not None
+            and full_path
+            and candidate.is_file()
+            and candidate.is_relative_to(spa_dir.resolve())
         ):
             # Starlette's :path converter passes percent-decoded input —
             # bound-check against spa_dir or /../ traversal reads arbitrary files.

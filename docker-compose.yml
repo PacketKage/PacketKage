@@ -2,9 +2,29 @@ services:
   packetkage:
     build: .
     ports:
-      # Localhost-only by default. Do not expose this unauthenticated service
-      # beyond the host without placing it behind suitable access controls.
+      # Localhost-only by default. To serve other machines, terminate TLS at a
+      # reverse proxy (see reverse-proxy/nginx.conf) and change this mapping to
+      # "8000:8000". Application authentication is enforced either way.
       - "127.0.0.1:8000:8000"
+    environment:
+      # OIDC is required — the API returns 503 until it is configured (fail
+      # closed). Leave these unset and complete the /setup wizard (persisted to
+      # the data volume, no restart); set any of them here to make that value
+      # authoritative and read-only in the wizard (env always wins).
+      PACKETKAGE_PUBLIC_URL: ${PACKETKAGE_PUBLIC_URL:-}
+      PACKETKAGE_OIDC_ISSUER: ${PACKETKAGE_OIDC_ISSUER:-}
+      PACKETKAGE_OIDC_CLIENT_ID: ${PACKETKAGE_OIDC_CLIENT_ID:-}
+      PACKETKAGE_OIDC_CLIENT_SECRET: ${PACKETKAGE_OIDC_CLIENT_SECRET:-}
+      PACKETKAGE_OIDC_REDIRECT_URI: ${PACKETKAGE_OIDC_REDIRECT_URI:-}
+      PACKETKAGE_OIDC_SCOPE: ${PACKETKAGE_OIDC_SCOPE:-}
+      PACKETKAGE_OIDC_GROUPS_CLAIM: ${PACKETKAGE_OIDC_GROUPS_CLAIM:-}
+      PACKETKAGE_ADMIN_GROUP: ${PACKETKAGE_ADMIN_GROUP:-}
+      PACKETKAGE_ANALYST_GROUP: ${PACKETKAGE_ANALYST_GROUP:-}
+      # Optional overrides for where the wizard persists config + bootstrap token.
+      PACKETKAGE_SETUP_FILE: ${PACKETKAGE_SETUP_FILE:-}
+      PACKETKAGE_SETUP_TOKEN: ${PACKETKAGE_SETUP_TOKEN:-}
+      PACKETKAGE_SESSION_TTL: ${PACKETKAGE_SESSION_TTL:-28800}
+      PACKETKAGE_SESSION_SECURE: ${PACKETKAGE_SESSION_SECURE:-}
     # Live capture: scapy needs CAP_NET_RAW (AF_PACKET socket) and
     # CAP_NET_ADMIN (interface bind). The image's file capabilities deliver
     # them to the non-root process; cap_add keeps the container's bounding

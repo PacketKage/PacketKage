@@ -573,3 +573,70 @@ export interface EngineerMetrics {
   issues: EngineerIssue[]
   health: 'healthy' | 'warning' | 'degraded'
 }
+
+// ---- Authentication (OIDC / Authentik) ----
+
+export type AuthRole = 'admin' | 'analyst'
+
+export interface AuthUser {
+  authenticated: boolean
+  sub: string
+  username: string
+  email: string | null
+  roles: string[]
+  groups: string[]
+  is_admin: boolean
+}
+
+export interface AuthStatus {
+  configured: boolean
+  admin_group: string
+  analyst_group: string
+}
+
+// ---- First-run setup wizard ----
+
+export interface SetupStatus {
+  /** whether the backend has OIDC configured */
+  configured: boolean
+  /** true when this caller is remote and must supply the bootstrap token */
+  requires_token: boolean
+}
+
+/** Editable OIDC client settings (the secret is never returned by the API). */
+export interface SetupValues {
+  oidc_issuer: string
+  oidc_client_id: string
+  oidc_client_secret: string
+  oidc_redirect_uri: string
+  public_url: string
+  oidc_scope: string
+  oidc_groups_claim: string
+  admin_group: string
+  analyst_group: string
+}
+
+export interface SetupConfig {
+  configured: boolean
+  values: SetupValues
+  /** fields managed by environment variables (read-only in the UI) */
+  locked: string[]
+  client_secret_set: boolean
+  persisted: boolean
+}
+
+export interface SetupTestResult {
+  ok: boolean
+  detail?: string
+  stage?: string
+  issuer?: string
+  authorization_endpoint?: string
+  token_endpoint?: string
+  jwks_uri?: string
+}
+
+export interface SetupSaveResult {
+  configured: boolean
+  applied: string[]
+  redirect_uri: string
+}

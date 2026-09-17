@@ -6,6 +6,7 @@ import { Modal } from '../components/Modal'
 import { StatusPill, formatBytes } from '../components/ui'
 import { mutateError, mutateSuccess, watchJobForToast } from '../components/toasts'
 import { useCaptures } from '../hooks/captures'
+import { useAuth } from '../auth/AuthContext'
 import type { Capture, Job } from '../types/api'
 
 export function CapturePage() {
@@ -16,6 +17,7 @@ export function CapturePage() {
   const [pendingDelete, setPendingDelete] = useState<Capture | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
+  const { isAdmin } = useAuth()
 
   const { data: parsers } = useQuery({ queryKey: ['parsers'], queryFn: api.parsers })
   const { data: captures } = useCaptures()
@@ -186,17 +188,19 @@ export function CapturePage() {
               </div>
             </div>
             <StatusPill status={current.status} />
-            <button
-              // `current` may be the synthesized analyzing object; the button
-              // is disabled exactly then, so the modal only ever gets a full row
-              onClick={() => setPendingDelete(current as Capture)}
-              aria-label={`Delete capture ${current.filename}`}
-              title="Delete this capture and its analysis data"
-              disabled={current.status === 'queued' || current.status === 'analyzing'}
-              className="rounded-lg p-1.5 text-fg-subtle transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
-            >
-              <Trash2 size={15} aria-hidden />
-            </button>
+            {isAdmin && (
+              <button
+                // `current` may be the synthesized analyzing object; the button
+                // is disabled exactly then, so the modal only ever gets a full row
+                onClick={() => setPendingDelete(current as Capture)}
+                aria-label={`Delete capture ${current.filename}`}
+                title="Delete this capture and its analysis data"
+                disabled={current.status === 'queued' || current.status === 'analyzing'}
+                className="rounded-lg p-1.5 text-fg-subtle transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+              >
+                <Trash2 size={15} aria-hidden />
+              </button>
+            )}
             {current.status === 'created' && (
               <button
                 disabled={analyze.isPending}
@@ -325,14 +329,16 @@ export function CapturePage() {
                     {c.packet_count.toLocaleString()} pkt · {formatBytes(c.size_bytes)}
                   </span>
                 </button>
-                <button
-                  onClick={() => setPendingDelete(c)}
-                  aria-label={`Delete capture ${c.filename}`}
-                  title="Delete this capture and its analysis data"
-                  className="rounded-lg p-1.5 text-fg-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-                >
-                  <Trash2 size={14} aria-hidden />
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setPendingDelete(c)}
+                    aria-label={`Delete capture ${c.filename}`}
+                    title="Delete this capture and its analysis data"
+                    className="rounded-lg p-1.5 text-fg-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </button>
+                )}
               </div>
             ))}
           </div>

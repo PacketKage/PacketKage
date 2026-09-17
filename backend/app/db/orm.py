@@ -1,4 +1,5 @@
 """SQLAlchemy ORM models (SQLite persistence layer)."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -58,7 +59,9 @@ class FlowModel(Base):
     packets_reverse: Mapped[int] = mapped_column(Integer, default=0)
     bytes_reverse: Mapped[int] = mapped_column(Integer, default=0)
     duration: Mapped[float] = mapped_column(Float, default=0.0)
-    direction: Mapped[str] = mapped_column(String(16), default="outbound")  # outbound|inbound|internal|unknown
+    direction: Mapped[str] = mapped_column(
+        String(16), default="outbound"
+    )  # outbound|inbound|internal|unknown
     tcp_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
     retransmissions: Mapped[int] = mapped_column(Integer, default=0)
     resets: Mapped[int] = mapped_column(Integer, default=0)
@@ -158,13 +161,17 @@ class AlertModel(Base):
     source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     destination_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     destination_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    reasons: Mapped[list] = mapped_column(JSON, default=list)  # [{"reason": str, "detail": str, "weight": int}]
+    reasons: Mapped[list] = mapped_column(
+        JSON, default=list
+    )  # [{"reason": str, "detail": str, "weight": int}]
     evidence: Mapped[dict] = mapped_column(JSON, default=dict)  # rule-specific proof data
     related_flow_ids: Mapped[list] = mapped_column(JSON, default=list)
     related_packet_refs: Mapped[list] = mapped_column(JSON, default=list)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     acknowledged: Mapped[bool] = mapped_column(Integer, default=False)
-    tags: Mapped[list] = mapped_column(JSON, default=list)  # triage labels: confirmed | false-positive | escalated
+    tags: Mapped[list] = mapped_column(
+        JSON, default=list
+    )  # triage labels: confirmed | false-positive | escalated
     note: Mapped[str | None] = mapped_column(Text, nullable=True)  # free-text analyst note
     timestamp: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
@@ -175,7 +182,9 @@ class TimelineEventModel(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     capture_id: Mapped[str] = mapped_column(String(32), index=True)
-    event_type: Mapped[str] = mapped_column(String(32))  # dns_query|dns_response|tcp_connect|http_request|tls_handshake|alert|flow_failed|scan
+    event_type: Mapped[str] = mapped_column(
+        String(32)
+    )  # dns_query|dns_response|tcp_connect|http_request|tls_handshake|alert|flow_failed|scan
     label: Mapped[str] = mapped_column(String(255))
     timestamp: Mapped[float] = mapped_column(Float, index=True)
     source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -245,6 +254,27 @@ class CaseModel(Base):
     updated_at: Mapped[datetime | None] = mapped_column(default=None)
 
 
+class AuthSessionModel(Base):
+    """Server-side application session minted after a successful OIDC login.
+
+    The browser only ever holds the opaque, HttpOnly, random session id in a
+    cookie; identity, roles and expiry live here. Deleting the row (logout,
+    rotation) or letting it lapse revokes access instantly, independent of the
+    upstream IdP session.
+    """
+
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)  # opaque random token (cookie value)
+    sub: Mapped[str] = mapped_column(String(255), index=True)  # IdP subject
+    username: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    groups: Mapped[list] = mapped_column(JSON, default=list)  # raw IdP groups
+    roles: Mapped[list] = mapped_column(JSON, default=list)  # packetkage-admin / packetkage-analyst
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class GraphEdgeModel(Base):
     """Evidence-graph relationship (Graph 2.0) — materialized at analysis time.
 
@@ -267,8 +297,12 @@ class GraphEdgeModel(Base):
     capture_id: Mapped[str] = mapped_column(String(32), index=True)
     source_id: Mapped[str] = mapped_column(String(512))
     target_id: Mapped[str] = mapped_column(String(512))
-    relationship: Mapped[str] = mapped_column(String(32))  # DNS_QUERY | RESOLVES_TO | TLS_SNI | HTTP_HOST | FLOW | EXPOSES | TRIGGERED | TARGETS | GROUPS | INCLUDES
-    provenance: Mapped[str] = mapped_column(String(16), default="observed")  # observed | correlated | enriched
+    relationship: Mapped[str] = mapped_column(
+        String(32)
+    )  # DNS_QUERY | RESOLVES_TO | TLS_SNI | HTTP_HOST | FLOW | EXPOSES | TRIGGERED | TARGETS | GROUPS | INCLUDES
+    provenance: Mapped[str] = mapped_column(
+        String(16), default="observed"
+    )  # observed | correlated | enriched
     first_seen: Mapped[float] = mapped_column(Float)
     last_seen: Mapped[float] = mapped_column(Float)
     count: Mapped[int] = mapped_column(Integer, default=0)  # contributing observations

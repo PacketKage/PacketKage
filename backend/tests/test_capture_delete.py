@@ -9,6 +9,7 @@ NOTE: conftest's app_env purges and reloads every app.* module per test, so
 ALL app imports here happen inside functions/bodies — never at module level
 (a module-level import would bind to the pre-reload module and its engine).
 """
+
 from __future__ import annotations
 
 import time
@@ -33,9 +34,7 @@ SCOPED_TABLES = (
 def _upload(client, pcap_name: str) -> str:
     path = TESTDATA / pcap_name
     with open(path, "rb") as f:
-        resp = client.post(
-            "/api/captures", files={"file": (pcap_name, f, "application/octet-stream")}
-        )
+        resp = client.post("/api/captures", files={"file": (pcap_name, f, "application/octet-stream")})
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
 
@@ -76,12 +75,7 @@ def _count(model_name: str, capture_id: str) -> int:
     model = _orm(model_name)
     with SessionLocal() as db:
         return int(
-            db.scalar(
-                select(func.count())
-                .select_from(model)
-                .where(model.capture_id == capture_id)
-            )
-            or 0
+            db.scalar(select(func.count()).select_from(model).where(model.capture_id == capture_id)) or 0
         )
 
 
@@ -215,11 +209,7 @@ def test_delete_rolls_back_atomically_on_db_error(client, monkeypatch):
         from app.core.database import engine as _engine
 
         with _engine.begin() as conn:
-            conn.execute(
-                sa_delete(_orm("PacketModel")).where(
-                    _orm("PacketModel").capture_id == cid
-                )
-            )
+            conn.execute(sa_delete(_orm("PacketModel")).where(_orm("PacketModel").capture_id == cid))
             raise RuntimeError("simulated failure mid-transaction")
 
     from app.repositories import CaptureRepository
