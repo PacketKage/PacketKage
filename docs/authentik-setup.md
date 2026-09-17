@@ -1,7 +1,7 @@
 # Authentik OIDC setup
 
 PacketKage has no local accounts. Every user signs in through an OpenID
-Connect provider — Authentik is the reference deployment — using the
+Connect provider - Authentik is the reference deployment - using the
 Authorization-Code flow with PKCE. The browser never sees a token beyond the
 short-lived authorization code; the backend exchanges it, validates the ID
 token (signature via JWKS, `iss`, `aud`/`azp`, `nonce`, `exp`/`nbf`), and mints
@@ -19,19 +19,19 @@ See `backend/app/auth/` for the implementation.
 
 ---
 
-## Option 0 — First-run setup wizard (no env editing)
+## Option 0 - First-run setup wizard (no env editing)
 
 If PacketKage starts **without** OIDC configured it fails closed (503 on the
 product API) and the UI opens a setup wizard at `/setup` automatically. Use it
 to connect any OIDC provider, including an Authentik you have already created
-(create the provider/application first — see steps below).
+(create the provider/application first - see steps below).
 
 1. Open `http://<your-host>/setup`.
 2. Fill in **Issuer URL**, **Client ID**, **Client secret**, **Public URL**, and
    the group names. The redirect URI is derived from the public URL when blank.
-3. Click **Test connection** — the backend fetches
+3. Click **Test connection** - the backend fetches
    `/.well-known/openid-configuration` and the JWKS without saving anything.
-4. Click **Save & enable** — values are persisted to `/data/setup.json` (`0600`)
+4. Click **Save & enable** - values are persisted to `/data/setup.json` (`0600`)
    and applied immediately (no restart).
 
 Notes:
@@ -48,7 +48,7 @@ Notes:
   never returned by the API.
 
 For local development there is a stdlib-only helper that automates all of the
-above against the bundled Authentik — it fills `.env` secrets, starts the
+above against the bundled Authentik - it fills `.env` secrets, starts the
 Authentik containers (never the `packetkage` one), creates the groups, provider
 and application over the Authentik API, and writes `backend/data/setup.json`:
 
@@ -63,7 +63,7 @@ It is safe to re-run and does not overwrite values that are already filled in.
 
 ---
 
-## Option A — Bundled Authentik (local evaluation)
+## Option A - Bundled Authentik (local evaluation)
 
 The repository ships a Compose overlay that runs Authentik alongside
 PacketKage.
@@ -123,7 +123,7 @@ In the Authentik admin UI:
      (or the explicit-consent flow if you prefer a consent screen)
    * Client type: **Confidential**
    * Redirect URIs: `http://localhost:8000/api/auth/callback`
-     (must match `PACKETKAGE_OIDC_REDIRECT_URI` exactly — scheme, host, port, path)
+     (must match `PACKETKAGE_OIDC_REDIRECT_URI` exactly - scheme, host, port, path)
    * Scopes: ensure `openid`, `profile`, `email` are selected (add the
      `groups` scope / an "OpenID `groups`" mapping so the claim is emitted).
    * Advanced protocol settings → **Subject mode**: *Based on the User's
@@ -154,7 +154,7 @@ you land back on the PacketKage dashboard.
 
 ---
 
-## Option B — External Authentik
+## Option B - External Authentik
 
 Point PacketKage at any Authentik instance (or another OIDC provider) that the
 backend and browsers can both reach at the same URL:
@@ -213,6 +213,6 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
 | `Invalid issuer` after Authentik login | The issuer the backend fetches differs from the token `iss`. Ensure backend and browser use the identical issuer URL (`authentik` alias + `/etc/hosts`, or a real public hostname). |
 | `redirect_uri mismatch` | `PACKETKAGE_OIDC_REDIRECT_URI` must match a registered Redirect URI on the provider exactly. |
 | Login succeeds but the app shows "Access denied" | The user is not in `packetkage-admin` or `packetkage-analyst`. Add them to a group in Authentik. |
-| No Admin link / delete buttons | Working as intended for analysts — those are admin-only. |
+| No Admin link / delete buttons | Working as intended for analysts - those are admin-only. |
 | Cookie not stored | Serving over HTTPS without `Secure`, or the reverse proxy rewrites the Host. Check `PACKETKAGE_PUBLIC_URL` and cookie flags in DevTools. |
 | `nonce` / `expired token` errors | Clock skew between hosts. Keep the containers/hosts time-synced (NTP). |

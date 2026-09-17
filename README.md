@@ -157,6 +157,21 @@ podman-compose down     # Podman
 * Node.js 24.x
 * npm
 
+### Setup script (one script)
+
+```bash
+python3 scripts/packetkage-setup.py
+```
+
+It will ask you to enter the `akadmin` password (press Enter on the prompt to auto-generate one). Then it takes over automatically:
+
+1. copies `.env.example` → `.env` and fills the required secrets;
+2. starts the bundled Authentik stack (postgres, redis, server, worker) and waits until it is **healthy** - the first boot runs database migrations, so this step can take a few minutes;
+3. creates the `packetkage-admin` and `packetkage-analyst` groups, the `packetkage` OAuth2/OpenID provider and the application via the Authentik API, then adds `akadmin` to both groups;
+4. writes the backend configuration to `backend/data/setup.json` (`0600`), so PacketKage starts **already configured**.
+
+The script is standard-library only and safe to re-run. `--dry-run` previews every action without changing anything.
+
 ### Backend
 
 ```bash
@@ -202,90 +217,16 @@ Then open:
 
 ## Authentication (OIDC / Authentik)
 
-PacketKage now ships a complete authentication system. There are **no local
-accounts and no password storage** — every login is delegated to an OpenID
-Connect provider (Authentik by reference). The flow is standard
-**Authorization Code + PKCE**:
+PacketKage ships a complete authentication system - there are **no local
+accounts and no password storage**. Every login is delegated to an OpenID
+Connect provider (Authentik by reference) using **Authorization Code + PKCE**,
+and roles are derived from the token's `groups` claim (`packetkage-admin` or
+`packetkage-analyst`). Until a provider is configured, the API fails closed
+(HTTP 503).
 
-1. The browser hits `/api/auth/login`, which redirects to the provider with a
-   `state`, `nonce`, and PKCE `code_challenge`.
-2. The provider authenticates the user and redirects back to
-   `/api/auth/callback`.
-3. The backend exchanges the code, validates the ID token (JWKS signature,
-   issuer, audience, nonce, expiry) and mints its own server-side session
-   cookie (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS).
-4. Roles are derived **solely** from the token's `groups` claim — users in
-   neither group are refused at login.
-
-### Roles
-
-| Authentik group      | Role    | Capabilities                                      |
-| -------------------- | ------- | ------------------------------------------------- |
-| `packetkage-admin`   | Admin   | Everything, including deleting captures and cases |
-| `packetkage-analyst` | Analyst | Upload, analyze, investigate (no destructive ops) |
-
-Group names are configurable via `PACKETKAGE_ADMIN_GROUP` /
-`PACKETKAGE_ANALYST_GROUP`.
-
-### Setup — quickest path (one script)
-
-PacketKage ships a one-command setup script that provisions the whole stack —
-Authentik included — for local development.
-
-**Step 1 — run the setup script**
-
-```bash
-python3 scripts/packetkage-setup.py
-```
-
-It will ask you to **enter the `akadmin` password** (press Enter on the prompt
-to auto-generate one). Then it takes over automatically:
-
-1. copies `.env.example` → `.env` and fills the required secrets;
-2. starts the bundled Authentik stack (postgres, redis, server, worker) and
-   waits until it is **healthy** — the first boot runs database migrations, so
-   this step can take a few minutes;
-3. creates the `packetkage-admin` and `packetkage-analyst` groups, the
-   `packetkage` OAuth2/OpenID provider and the application via the Authentik
-   API, then adds `akadmin` to both groups;
-4. writes the backend configuration to `backend/data/setup.json` (`0600`), so
-   PacketKage starts **already configured**.
-
-The script is standard-library only and safe to re-run. `--dry-run` previews
-every action without changing anything.
-
-**Step 2 — start the backend**
-
-```bash
-cd backend
-source .venv/bin/activate
-python -m uvicorn app.main:app --reload --port 8000
-```
-
-**Step 3 — start the frontend**
-
-```bash
-cd frontend
-npm run dev
-```
-
-Then open [http://localhost:5173](http://localhost:5173) and sign in with
-**`akadmin`** and the password you entered in step 1.
-
-### Alternatives
-
-* **First-run setup wizard:** while OIDC is unconfigured the API fails closed
-  (HTTP 503) and the UI automatically opens a wizard at `http://localhost:8000/setup`.
-  Enter the issuer URL, client ID/secret, public URL and group names, click
-  **Test connection** (it fetches the discovery document and signing keys), then
-  **Save & enable**. Settings are written to `backend/data/setup.json` and
-  applied immediately.
-* **Environment variables:** `cp .env.example .env` and set `PACKETKAGE_OIDC_*`
-  plus `PACKETKAGE_PUBLIC_URL` (values are authoritative and appear read-only in
-  the wizard). Remove the leading `replace-with-...` placeholders first — the
-  setup script does this for you automatically.
-* **Authentik admin UI:** the bundled Authentik is available at
-  `http://localhost:9000` (user `akadmin`).
+For the full walkthrough - provider and groups, the first-run setup wizard,
+environment variables, TLS reverse proxy, and troubleshooting - see
+[docs/authentik-setup.md](docs/authentik-setup.md).
 
 ## Test Data
 
@@ -410,9 +351,9 @@ PacketKage/
 
 ## Testing
 
-The project is covered by three test layers — backend pytest, frontend vitest, and end-to-end Playwright (the first two run in GitHub Actions CI, E2E runs locally):
+The project is covered by three test layers - backend pytest, frontend vitest, and end-to-end Playwright (the first two run in GitHub Actions CI, E2E runs locally):
 
-**Backend**  219 integration tests (pytest) over the full analysis pipeline — detection rules, the evidence graph, retry logic, and the OIDC/authentication stack (a fake OIDC provider exercises the real Authorization-Code + PKCE flow):
+**Backend**  219 integration tests (pytest) over the full analysis pipeline - detection rules, the evidence graph, retry logic, and the OIDC/authentication stack (a fake OIDC provider exercises the real Authorization-Code + PKCE flow):
 
 ```bash
 cd backend
@@ -453,7 +394,7 @@ PacketKage can also record traffic directly from a network interface  no upload 
 
 The recorded traffic is saved as a PCAP and flows through the exact same analysis pipeline as an upload  flows, hosts, alerts, timeline, everything.
 
-> Note: live sniffing needs elevated permissions — the container grants them via `cap_add` (`NET_RAW`/`NET_ADMIN` in `docker-compose.yml`), and the image ships file capabilities on the interpreter so the backend runs as a non-root user. For native (non-Docker) setups, grant the venv interpreter the capabilities instead of running as root (see the Backend section above). Interface listing and all other features work unprivileged.
+> Note: live sniffing needs elevated permissions - the container grants them via `cap_add` (`NET_RAW`/`NET_ADMIN` in `docker-compose.yml`), and the image ships file capabilities on the interpreter so the backend runs as a non-root user. For native (non-Docker) setups, grant the venv interpreter the capabilities instead of running as root (see the Backend section above). Interface listing and all other features work unprivileged.
 
 **Docker / Podman specifics:**
 

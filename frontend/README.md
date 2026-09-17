@@ -21,10 +21,10 @@ npm run dev        # Vite dev server on http://localhost:5173 (expects the API o
 
 ## Structure
 
-* `src/api/` — typed REST client for the backend API
-* `src/pages/` — route views (Graph, Capture, Cases, Flows, Alerts, Replay, …)
-* `src/components/` — shared UI primitives and domain components
-* `src/hooks/` — React Query data hooks
-* `src/types/` — API shared types
-* `src/test/` — test render harness and helpers
-* `e2e/` — Playwright end-to-end specs
+* `src/api/` - typed REST client for the backend API
+* `src/pages/` - route views (Graph, Capture, Cases, Flows, Alerts, Replay, …)
+* `src/components/` - shared UI primitives and domain components
+* `src/hooks/` - React Query data hooks
+* `src/types/` - API shared types
+* `src/test/` - test render harness and helpers
+* `e2e/` - Playwright end-to-end specs
