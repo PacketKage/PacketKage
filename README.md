@@ -178,6 +178,9 @@ The script is standard-library only and safe to re-run. `--dry-run` previews eve
 
 cd backend
 
+pip install -r requirements.txt        # runtime
+pip install -r requirements-dev.txt    # tests/lint
+
 python3 -m venv .venv
 
 source .venv/bin/activate
