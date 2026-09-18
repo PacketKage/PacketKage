@@ -10,6 +10,8 @@ import {
 import { SkeletonRow, SkeletonStatBox, formatBytes, formatTime } from '../components/ui'
 import { useDebouncedValue, useSelectedCapture } from '../hooks/captures'
 import { fetchAllPages, useCsvExport } from '../hooks/useCsvExport'
+import { translate } from '../i18n/locale'
+import { useT } from '../i18n/LocaleContext'
 import { csvTime } from '../utils/csv'
 import type { DNSTransaction, HTTPTransaction, ProtocolStats, TLSSession } from '../types/api'
 
@@ -19,6 +21,7 @@ const PAGE_SIZE = 50
 
 export function ProtocolPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [tab, setTab] = useState<Tab>('dns')
 
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -29,30 +32,28 @@ export function ProtocolPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Protocol Explorer</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        What is each protocol doing — not which fields live in a packet.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('protocol.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('protocol.subtitle')}</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
-        {(['dns', 'http', 'tls'] as Tab[]).map((t) => (
+        {(['dns', 'http', 'tls'] as Tab[]).map((tt) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tt}
+            onClick={() => setTab(tt)}
             className={`rounded-lg px-4 py-1.5 font-medium uppercase tracking-wide ring-1 transition ${
-              tab === t
+              tab === tt
                 ? 'bg-info/10 text-info ring-info/30'
                 : 'text-fg-muted ring-border-strong hover:text-fg'
             }`}
           >
-            {t}
+            {t(`protocol.tab.${tt}`)}
           </button>
         ))}
       </div>
 
       {!analyzed.length ? (
-        <EmptyState>No analyzed captures yet.</EmptyState>
+        <EmptyState>{t('protocol.empty.no_analyzed')}</EmptyState>
       ) : (
         <>
           {/* Protocol overview stats */}
@@ -77,22 +78,23 @@ export function ProtocolPage() {
 // ---------------- DNS ----------------
 
 function DnsStats({ stats }: { stats: ProtocolStats['dns'] }) {
+  const t = useT()
   return (
     <div className="mb-4 grid grid-cols-5 gap-4">
-      <StatBox label="Transactions" value={stats.transactions} />
-      <StatBox label="Unique Domains" value={stats.unique_domains} />
+      <StatBox label={t('protocol.dns.transactions')} value={stats.transactions} />
+      <StatBox label={t('protocol.dns.unique_domains')} value={stats.unique_domains} />
       <StatBox
-        label="NXDOMAIN"
+        label={t('protocol.dns.nxdomain')}
         value={stats.nxdomain_count}
         tone={stats.nxdomain_count > 0 ? 'red' : undefined}
       />
       <StatBox
-        label="NXDOMAIN Rate"
+        label={t('protocol.dns.nxdomain_rate')}
         value={stats.nxdomain_rate ? `${(stats.nxdomain_rate * 100).toFixed(0)}%` : '0%'}
         tone={stats.nxdomain_rate > 0.2 ? 'red' : undefined}
       />
       <StatBox
-        label="Avg Latency"
+        label={t('protocol.dns.avg_latency')}
         value={stats.avg_latency != null ? `${(stats.avg_latency * 1000).toFixed(1)} ms` : '—'}
       />
     </div>
@@ -100,6 +102,7 @@ function DnsStats({ stats }: { stats: ProtocolStats['dns'] }) {
 }
 
 function DnsTable({ captureId }: { captureId: string }) {
+  const t = useT()
   const [domain, setDomain] = useState('')
   const [nxdomainOnly, setNxdomainOnly] = useState(false)
   const [offset, setOffset] = useState(0)
@@ -121,8 +124,13 @@ function DnsTable({ captureId }: { captureId: string }) {
   const txns = page?.items ?? []
 
   const dnsExport = useCsvExport<DNSTransaction>({
-    label: 'dns',
-    headers: ['Time', 'Client', 'Query', 'Type', 'Answers', 'RCode', 'Latency (s)'],
+    label: translate('protocol.csv.dns.label'),
+    headers: [
+      translate('protocol.csv.dns.time'), translate('protocol.csv.dns.client'),
+      translate('protocol.csv.dns.query'), translate('protocol.csv.dns.type'),
+      translate('protocol.csv.dns.answers'), translate('protocol.csv.dns.rcode'),
+      translate('protocol.csv.dns.latency'),
+    ],
     toRow: (t) => [
       csvTime(t.timestamp), t.client_ip, t.query_name, t.query_type,
       t.response_ips, t.rcode, t.latency,
@@ -143,8 +151,8 @@ function DnsTable({ captureId }: { captureId: string }) {
         <input
           value={domain}
           onChange={(e) => { setDomain(e.target.value); setOffset(0) }}
-          placeholder="filter by domain…"
-          aria-label="Filter by domain"
+          placeholder={t('protocol.dns.filter_placeholder')}
+          aria-label={t('protocol.dns.filter_label')}
           className="w-64 rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg placeholder-fg-subtle focus:border-info/50 focus:outline-none"
         />
         <button
@@ -155,13 +163,17 @@ function DnsTable({ captureId }: { captureId: string }) {
               : 'text-fg-muted ring-border-strong hover:text-fg'
           }`}
         >
-          NXDOMAIN only
+          {t('protocol.dns.nxdomain_only')}
         </button>
-        <ExportButton onClick={dnsExport.export} pending={dnsExport.isExporting} disabled={isLoading} label="dns" />
+        <ExportButton onClick={dnsExport.export} pending={dnsExport.isExporting} disabled={isLoading} label={translate('protocol.csv.dns.label')} />
       </div>
       <TableShell
         count={page?.total ?? 0}
-        headers={['Time', 'Client', 'Query', 'Type', 'Answers', 'RCode', 'Latency']}
+        headers={[
+          t('protocol.table.time'), t('protocol.table.client'), t('protocol.table.query'),
+          t('protocol.table.type'), t('protocol.table.answers'), t('protocol.table.rcode'),
+          t('protocol.table.latency'),
+        ]}
         loading={isLoading}
         error={isError}
         onRetry={refetch}
@@ -213,12 +225,13 @@ function DnsTable({ captureId }: { captureId: string }) {
 // ---------------- HTTP ----------------
 
 function HttpStats({ stats }: { stats: ProtocolStats['http'] }) {
+  const t = useT()
   return (
     <div className="mb-4 grid grid-cols-5 gap-4">
-      <StatBox label="Transactions" value={stats.transactions} />
-      <StatBox label="Methods" value={Object.keys(stats.methods).join(', ') || '—'} />
+      <StatBox label={t('protocol.http.transactions')} value={stats.transactions} />
+      <StatBox label={t('protocol.http.methods')} value={Object.keys(stats.methods).join(', ') || '—'} />
       <StatBox
-        label="Errors (4xx/5xx)"
+        label={t('protocol.http.errors')}
         value={
           Object.entries(stats.status_codes)
             .filter(([s]) => Number(s) >= 400)
@@ -226,13 +239,14 @@ function HttpStats({ stats }: { stats: ProtocolStats['http'] }) {
         }
         tone="amber"
       />
-      <StatBox label="Request Bytes" value={formatBytes(stats.total_request_bytes)} />
-      <StatBox label="Response Bytes" value={formatBytes(stats.total_response_bytes)} />
+      <StatBox label={t('protocol.http.request_bytes')} value={formatBytes(stats.total_request_bytes)} />
+      <StatBox label={t('protocol.http.response_bytes')} value={formatBytes(stats.total_response_bytes)} />
     </div>
   )
 }
 
 function HttpTable({ captureId }: { captureId: string }) {
+  const t = useT()
   const [hostFilter, setHostFilter] = useState('')
   const [offset, setOffset] = useState(0)
   const debouncedHost = useDebouncedValue(hostFilter)
@@ -246,10 +260,14 @@ function HttpTable({ captureId }: { captureId: string }) {
   const txns = page?.items ?? []
 
   const httpExport = useCsvExport<HTTPTransaction>({
-    label: 'http',
+    label: translate('protocol.csv.http.label'),
     headers: [
-      'Time', 'Method', 'Host', 'Path', 'Status', 'User Agent',
-      'Request Bytes', 'Response Bytes', 'Client IP', 'Server IP', 'Server Port',
+      translate('protocol.csv.http.time'), translate('protocol.csv.http.method'),
+      translate('protocol.csv.http.host'), translate('protocol.csv.http.path'),
+      translate('protocol.csv.http.status'), translate('protocol.csv.http.user_agent'),
+      translate('protocol.csv.http.request_bytes'), translate('protocol.csv.http.response_bytes'),
+      translate('protocol.csv.http.client_ip'), translate('protocol.csv.http.server_ip'),
+      translate('protocol.csv.http.server_port'),
     ],
     toRow: (t) => [
       csvTime(t.timestamp), t.method, t.host, t.path, t.status_code, t.user_agent,
@@ -265,15 +283,19 @@ function HttpTable({ captureId }: { captureId: string }) {
         <input
           value={hostFilter}
           onChange={(e) => { setHostFilter(e.target.value); setOffset(0) }}
-          placeholder="filter by host header…"
-          aria-label="Filter by host"
+          placeholder={t('protocol.http.filter_placeholder')}
+          aria-label={t('protocol.http.filter_label')}
           className="w-64 rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg placeholder-fg-subtle focus:border-info/50 focus:outline-none"
         />
-        <ExportButton onClick={httpExport.export} pending={httpExport.isExporting} disabled={isLoading} label="http" />
+        <ExportButton onClick={httpExport.export} pending={httpExport.isExporting} disabled={isLoading} label={translate('protocol.csv.http.label')} />
       </div>
       <TableShell
         count={page?.total ?? 0}
-        headers={['Time', 'Method', 'Host', 'Path', 'Status', 'UA', 'Size']}
+        headers={[
+          t('protocol.table.time'), t('protocol.table.method'), t('protocol.table.host'),
+          t('protocol.table.path'), t('protocol.table.status'), t('protocol.table.ua'),
+          t('protocol.table.size'),
+        ]}
         loading={isLoading}
         error={isError}
         onRetry={refetch}
@@ -323,6 +345,7 @@ function HttpTable({ captureId }: { captureId: string }) {
 // ---------------- TLS ----------------
 
 function TlsTable({ captureId }: { captureId: string }) {
+  const t = useT()
   const [sniFilter, setSniFilter] = useState('')
   const [offset, setOffset] = useState(0)
   const debouncedSni = useDebouncedValue(sniFilter)
@@ -336,8 +359,13 @@ function TlsTable({ captureId }: { captureId: string }) {
   const sessions = page?.items ?? []
 
   const tlsExport = useCsvExport<TLSSession>({
-    label: 'tls',
-    headers: ['First Seen', 'Client', 'Server', 'Server Port', 'SNI', 'Version', 'Bytes', 'Packets'],
+    label: translate('protocol.csv.tls.label'),
+    headers: [
+      translate('protocol.csv.tls.first_seen'), translate('protocol.csv.tls.client'),
+      translate('protocol.csv.tls.server'), translate('protocol.csv.tls.server_port'),
+      translate('protocol.csv.tls.sni'), translate('protocol.csv.tls.version'),
+      translate('protocol.csv.tls.bytes'), translate('protocol.csv.tls.packets'),
+    ],
     toRow: (s) => [
       csvTime(s.first_seen), s.client_ip, s.server_ip, s.server_port, s.sni, s.version,
       s.bytes, s.packets,
@@ -351,15 +379,18 @@ function TlsTable({ captureId }: { captureId: string }) {
         <input
           value={sniFilter}
           onChange={(e) => { setSniFilter(e.target.value); setOffset(0) }}
-          placeholder="filter by SNI…"
-          aria-label="Filter by SNI"
+          placeholder={t('protocol.tls.filter_placeholder')}
+          aria-label={t('protocol.tls.filter_label')}
           className="w-64 rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg placeholder-fg-subtle focus:border-info/50 focus:outline-none"
         />
-        <ExportButton onClick={tlsExport.export} pending={tlsExport.isExporting} disabled={isLoading} label="tls" />
+        <ExportButton onClick={tlsExport.export} pending={tlsExport.isExporting} disabled={isLoading} label={translate('protocol.csv.tls.label')} />
       </div>
       <TableShell
         count={page?.total ?? 0}
-        headers={['First Seen', 'Client', 'Server', 'SNI', 'Bytes', 'Packets']}
+        headers={[
+          t('protocol.table.first_seen'), t('protocol.table.client'), t('protocol.table.server'),
+          t('protocol.table.sni'), t('protocol.table.bytes'), t('protocol.table.packets'),
+        ]}
         loading={isLoading}
         error={isError}
         onRetry={refetch}
@@ -382,7 +413,7 @@ function TlsTable({ captureId }: { captureId: string }) {
               {s.server_ip}
               <span className="text-fg-subtle">:{s.server_port}</span>
             </Td>
-            <Td className="font-mono text-xs text-info">{s.sni ?? '— (encrypted/no SNI)'}</Td>
+            <Td className="font-mono text-xs text-info">{s.sni ?? t('protocol.tls.no_sni')}</Td>
             <Td className="text-xs text-fg-muted">{formatBytes(s.bytes)}</Td>
             <Td className="text-xs text-fg-muted">{s.packets}</Td>
           </tr>
@@ -434,6 +465,7 @@ function TableShell({
   footer?: React.ReactNode
   children: React.ReactNode
 }) {
+  const t = useT()
   return (
     <div
       className="overflow-hidden rounded-xl border border-border bg-surface-2/50"
@@ -442,23 +474,23 @@ function TableShell({
       <div className="border-b border-border px-4 py-3 text-sm text-fg-muted">
         {error ? (
           <span className="flex items-center gap-3 text-danger">
-            Failed to load records.
+            {t('common.failed_to_load')}
             <button
               onClick={onRetry}
               className="rounded-lg bg-surface-3 px-3 py-1 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </span>
         ) : loading ? (
           <>
-            <span className="sr-only">Loading records…</span>
+            <span className="sr-only">{t('common.loading_records')}</span>
             <span aria-hidden>
               <SkeletonRow className="w-24" />
             </span>
           </>
         ) : (
-          `${count.toLocaleString()} records`
+          t('common.records', { count: count.toLocaleString() })
         )}
       </div>
       <div className="overflow-x-auto">
@@ -524,12 +556,12 @@ function ExportButton({
     <button
       onClick={onClick}
       disabled={pending || disabled}
-      aria-label={`Export ${label} to CSV`}
-      title={`Export filtered ${label} to CSV`}
+      aria-label={translate('common.export_to_csv', { label })}
+      title={translate('common.export_filtered_to_csv', { label })}
       className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:pointer-events-none disabled:opacity-50"
     >
       <Download size={12} aria-hidden />
-      {pending ? 'Exporting…' : 'CSV'}
+      {pending ? translate('common.exporting') : translate('common.csv')}
     </button>
   )
 }

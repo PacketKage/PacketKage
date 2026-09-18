@@ -1,5 +1,6 @@
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../hooks/theme'
+import { useT } from '../i18n/LocaleContext'
 
 /**
  * Visible dark/light theme switch, mounted in the Layout.
@@ -8,14 +9,16 @@ import { useTheme } from '../hooks/theme'
  */
 export function ThemeToggle() {
   const { theme, toggle } = useTheme()
+  const t = useT()
   const isDark = theme === 'dark'
+  const label = isDark ? t('theme.light') : t('theme.dark')
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      aria-label={label}
       aria-pressed={isDark}
-      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      title={label}
       className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
     >
       {isDark ? <Sun size={16} aria-hidden /> : <Moon size={16} aria-hidden />}

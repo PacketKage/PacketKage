@@ -163,8 +163,14 @@ class AlertModel(Base):
     destination_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reasons: Mapped[list] = mapped_column(
         JSON, default=list
-    )  # [{"reason": str, "detail": str, "weight": int}]
+    )  # [{"reason": str, "detail": str, "weight": int, "reason_key": str, "detail_key": str, "params": {...}}]
     evidence: Mapped[dict] = mapped_column(JSON, default=dict)  # rule-specific proof data
+    # i18n: canonical message keys + interpolation params for title/explanation
+    # (stored English strings remain the persisted fallback)
+    title_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    title_params: Mapped[dict] = mapped_column(JSON, default=dict)
+    explanation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    explanation_params: Mapped[dict] = mapped_column(JSON, default=dict)
     related_flow_ids: Mapped[list] = mapped_column(JSON, default=list)
     related_packet_refs: Mapped[list] = mapped_column(JSON, default=list)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)

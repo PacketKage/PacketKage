@@ -6,12 +6,15 @@ import { EvidenceTable } from '../components/EvidenceTable'
 import { Modal } from '../components/Modal'
 import { SkeletonRow, SkeletonStatus, formatTime } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
+import { useT } from '../i18n/LocaleContext'
+import { translate } from '../i18n/locale'
 import type { TimelineEvent } from '../types/api'
 
 const SPEEDS = [0.5, 1, 4, 16, 64]
 
 export function ReplayPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [playing, setPlaying] = useState(false)
   const [speed, setSpeed] = useState(4)
   const [position, setPosition] = useState(0) // event index
@@ -46,9 +49,9 @@ export function ReplayPage() {
   return (
     <div className="flex h-full flex-col p-8">
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold text-fg">Incident Replay</h1>
+        <h1 className="text-2xl font-semibold text-fg">{t('replay.title')}</h1>
         <span className="text-xs text-fg-subtle">
-          watch what happened, in order — click any event for evidence
+          {t('replay.subtitle')}
         </span>
         <div className="ml-auto">
           <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={(id) => { setCaptureId(id); setPosition(0); setPlaying(false) }} />
@@ -57,7 +60,7 @@ export function ReplayPage() {
 
       {!events ? (
         analyzed.length ? (
-          <SkeletonStatus label="Loading events…">
+          <SkeletonStatus label={t('replay.skeleton')}>
             <div className="flex flex-1 flex-col gap-4" aria-hidden>
               {/* transport controls */}
               <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-2/50 px-5 py-4">
@@ -84,12 +87,12 @@ export function ReplayPage() {
           </SkeletonStatus>
         ) : (
           <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-subtle">
-            No analyzed captures yet.
+            {t('replay.empty.no_analyzed')}
           </div>
         )
       ) : isError ? (
         <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-danger">
-          Failed to load replay events. Please try again.
+          {t('replay.error')}
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-4">
@@ -102,21 +105,21 @@ export function ReplayPage() {
               }}
               className="flex h-10 items-center justify-center rounded-full bg-accent/10 px-4 text-sm font-medium text-accent ring-1 ring-accent/30 hover:bg-accent/20"
             >
-              {playing ? 'Pause' : 'Play'}
+              {playing ? t('replay.pause') : t('replay.play')}
             </button>
             <button
               onClick={() => setPosition((p) => Math.max(0, p - 1))}
               className="rounded-lg px-2 py-1 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
-              title="previous event"
+              title={t('replay.previous_event')}
             >
-              Prev
+              {t('replay.prev')}
             </button>
             <button
               onClick={() => setPosition((p) => Math.min(events.length - 1, p + 1))}
               className="rounded-lg px-2 py-1 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
-              title="next event"
+              title={t('replay.next_event')}
             >
-              Next
+              {t('replay.next')}
             </button>
 
             {/* scrubber */}
@@ -175,10 +178,10 @@ export function ReplayPage() {
                 >
                   {current.label}
                 </span>
-                <span className="ml-auto text-xs text-fg-subtle">details →</span>
+                <span className="ml-auto text-xs text-fg-subtle">{t('replay.details')}</span>
               </button>
             ) : (
-              <span className="text-sm text-fg-subtle">No events</span>
+              <span className="text-sm text-fg-subtle">{t('replay.no_events')}</span>
             )}
           </div>
 
@@ -203,7 +206,7 @@ export function ReplayPage() {
                     <span className="min-w-0 flex-1 truncate text-fg-muted">{e.label}</span>
                     {isCurrent && (
                       <span className="shrink-0 text-xs uppercase tracking-wider text-accent">
-                        now
+                        {t('replay.now')}
                       </span>
                     )}
                   </button>
@@ -220,6 +223,7 @@ export function ReplayPage() {
 }
 
 function ReplayEventModal({ event, onClose }: { event: TimelineEvent; onClose: () => void }) {
+  const t = useT()
   const { data: flow } = useQuery({
     queryKey: ['flow', event.related_flow_id],
     queryFn: () => api.getFlow(event.related_flow_id!),
@@ -229,18 +233,21 @@ function ReplayEventModal({ event, onClose }: { event: TimelineEvent; onClose: (
   return (
     <Modal
       title={event.label}
-      subtitle={`${new Date(event.timestamp * 1000).toLocaleString()} · ${event.event_type}`}
+      subtitle={translate('replay.subtitle_format', {
+        date: new Date(event.timestamp * 1000).toLocaleString(),
+        type: event.event_type,
+      })}
       onClose={onClose}
     >
       <div className="space-y-4 p-5">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <div className="text-xs uppercase tracking-wider text-fg-subtle">Source</div>
+            <div className="text-xs uppercase tracking-wider text-fg-subtle">{t('replay.modal.source')}</div>
             <div className="mt-0.5 font-mono text-fg-muted">{event.source_ip ?? '—'}</div>
           </div>
           <div>
             <div className="text-xs uppercase tracking-wider text-fg-subtle">
-              Destination
+              {t('replay.modal.destination')}
             </div>
             <div className="mt-0.5 font-mono text-fg-muted">
               {event.destination_ip ?? '—'}
@@ -253,9 +260,9 @@ function ReplayEventModal({ event, onClose }: { event: TimelineEvent; onClose: (
         </div>
         {flow && (
           <div className="rounded-lg bg-bg/60 p-3 font-mono text-xs text-fg-muted ring-1 ring-border">
-            flow: {flow.source_ip}:{flow.source_port} → {flow.destination_ip}:
-            {flow.destination_port} · {flow.packets} pkt · {flow.bytes} B ·{' '}
-            {flow.tcp_state ?? 'n/a'}
+            {t('replay.modal.flow', {
+              flow: `${flow.source_ip}:${flow.source_port} → ${flow.destination_ip}:${flow.destination_port} · ${flow.packets} pkt · ${flow.bytes} B · ${flow.tcp_state ?? t('replay.modal.state_na')}`,
+            })}
           </div>
         )}
       </div>

@@ -17,12 +17,13 @@ import { ErrorState } from '../components/states'
 import { SkeletonRow, SkeletonStatus, formatBytes } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useTheme } from '../hooks/theme'
+import { useT } from '../i18n/LocaleContext'
 import type { EngineerIssue } from '../types/api'
 
-const HEALTH_STYLE: Record<string, { label: string; cls: string }> = {
-  healthy: { label: 'HEALTHY', cls: 'bg-accent/10 text-accent ring-accent/30' },
-  warning: { label: 'WARNING', cls: 'bg-warning/10 text-warning ring-warning/30' },
-  degraded: { label: 'DEGRADED', cls: 'bg-danger/10 text-danger ring-danger/30' },
+const HEALTH_STYLE: Record<string, { labelKey: string; cls: string }> = {
+  healthy: { labelKey: 'engineer.health.healthy', cls: 'bg-accent/10 text-accent ring-accent/30' },
+  warning: { labelKey: 'engineer.health.warning', cls: 'bg-warning/10 text-warning ring-warning/30' },
+  degraded: { labelKey: 'engineer.health.degraded', cls: 'bg-danger/10 text-danger ring-danger/30' },
 }
 
 const ISSUE_SEV: Record<string, string> = {
@@ -46,6 +47,7 @@ const PROTOCOL_COLORS_LIGHT = [
 export function EngineerPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
   const { theme } = useTheme()
+  const t = useT()
   const protocolColors =
     theme === 'light' ? PROTOCOL_COLORS_LIGHT : PROTOCOL_COLORS
 
@@ -59,9 +61,9 @@ export function EngineerPage() {
     <div className="p-8">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-fg">Engineer Mode</h1>
+          <h1 className="text-2xl font-semibold text-fg">{t('engineer.title')}</h1>
           <p className="mt-1 text-sm text-fg-subtle">
-            Network health — throughput, reliability, latency. Not security.
+            {t('engineer.subtitle')}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -71,7 +73,9 @@ export function EngineerPage() {
                 (HEALTH_STYLE[m.health] ?? HEALTH_STYLE.healthy).cls
               }`}
             >
-              {(HEALTH_STYLE[m.health] ?? HEALTH_STYLE.healthy).label}
+              {(HEALTH_STYLE[m.health] ?? HEALTH_STYLE.healthy).labelKey
+          ? t((HEALTH_STYLE[m.health] ?? HEALTH_STYLE.healthy).labelKey)
+          : ''}
             </span>
           )}
           <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
@@ -80,10 +84,10 @@ export function EngineerPage() {
 
       {!analyzed.length ? (
         <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-subtle">
-          No analyzed captures yet.
+          {t('engineer.empty.no_analyzed')}
         </div>
       ) : isLoading ? (
-        <SkeletonStatus label="Computing network health…">
+        <SkeletonStatus label={t('engineer.skeleton')}>
           <div className="space-y-6" aria-hidden>
             {/* health banner */}
             <SkeletonRow className="w-32 rounded-lg" />
@@ -114,7 +118,7 @@ export function EngineerPage() {
         <ErrorState message={String(error)} onRetry={() => void refetch()} />
       ) : !m ? (
         <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-subtle">
-          No metrics available.
+          {t('engineer.empty.no_metrics')}
         </div>
       ) : (
         <div className="space-y-6">
@@ -122,7 +126,7 @@ export function EngineerPage() {
           {m.issues.length > 0 && (
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <div className="mb-2 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Detected issues
+                {t('engineer.issues')}
               </div>
               <div className="space-y-1.5">
                 {m.issues.map((i: EngineerIssue, idx) => (
@@ -139,48 +143,48 @@ export function EngineerPage() {
 
           {/* Top stats */}
           <div className="grid grid-cols-6 gap-4">
-            <Metric label="Duration" value={`${m.capture_duration_s.toFixed(1)}s`} />
-            <Metric label="Packets" value={m.total_packets.toLocaleString()} />
-            <Metric label="Avg pps" value={m.avg_pps.toFixed(1)} />
-            <Metric label="Peak pps" value={m.peak_pps.toFixed(0)} />
-            <Metric label="Avg bandwidth" value={formatBps(m.avg_bandwidth_bps)} />
-            <Metric label="Peak bandwidth" value={formatBps(m.peak_bandwidth_bps)} />
+            <Metric label={t('engineer.metric.duration')} value={`${m.capture_duration_s.toFixed(1)}s`} />
+            <Metric label={t('engineer.metric.packets')} value={m.total_packets.toLocaleString()} />
+            <Metric label={t('engineer.metric.avg_pps')} value={m.avg_pps.toFixed(1)} />
+            <Metric label={t('engineer.metric.peak_pps')} value={m.peak_pps.toFixed(0)} />
+            <Metric label={t('engineer.metric.avg_bandwidth')} value={formatBps(m.avg_bandwidth_bps, t)} />
+            <Metric label={t('engineer.metric.peak_bandwidth')} value={formatBps(m.peak_bandwidth_bps, t)} />
           </div>
 
           {/* TCP + DNS health */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <div className="mb-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                TCP reliability
+                {t('engineer.tcp.title')}
               </div>
               <div className="space-y-2 text-sm">
                 <HealthRow
-                  label="Flows"
+                  label={t('engineer.tcp.flows')}
                   value={m.tcp.flows.toLocaleString()}
                   bad={false}
                 />
                 <HealthRow
-                  label="Retransmissions"
+                  label={t('engineer.tcp.retransmissions')}
                   value={`${m.tcp.retransmissions} (${(m.tcp.retransmission_ratio * 100).toFixed(1)}%)`}
                   bad={m.tcp.retransmission_ratio > 0.05}
                 />
                 <HealthRow
-                  label="SYN retransmissions"
+                  label={t('engineer.tcp.syn_retransmissions')}
                   value={String(m.tcp.syn_retransmissions)}
                   bad={m.tcp.syn_retransmissions > 0}
                 />
                 <HealthRow
-                  label="Resets"
+                  label={t('engineer.tcp.resets')}
                   value={`${m.tcp.resets} (${(m.tcp.reset_ratio * 100).toFixed(0)}%)`}
                   bad={m.tcp.reset_ratio > 0.1}
                 />
                 <HealthRow
-                  label="Failed connections"
+                  label={t('engineer.tcp.failed')}
                   value={`${m.tcp.failed_flows} (${(m.tcp.failure_ratio * 100).toFixed(0)}%)`}
                   bad={m.tcp.failure_ratio > 0.5}
                 />
                 <HealthRow
-                  label="One-way flows"
+                  label={t('engineer.tcp.one_way')}
                   value={String(m.tcp.one_way_flows)}
                   bad={m.tcp.one_way_flows > 5}
                 />
@@ -189,35 +193,35 @@ export function EngineerPage() {
 
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <div className="mb-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                DNS health
+                {t('engineer.dns.title')}
               </div>
               <div className="space-y-2 text-sm">
-                <HealthRow label="Transactions" value={String(m.dns.transactions)} bad={false} />
+                <HealthRow label={t('engineer.dns.transactions')} value={String(m.dns.transactions)} bad={false} />
                 <HealthRow
-                  label="Avg latency"
+                  label={t('engineer.dns.avg_latency')}
                   value={m.dns.avg_latency_ms != null ? `${m.dns.avg_latency_ms} ms` : '—'}
                   bad={(m.dns.avg_latency_ms ?? 0) > 500}
                 />
                 <HealthRow
-                  label="P95 latency"
+                  label={t('engineer.dns.p95_latency')}
                   value={m.dns.p95_latency_ms != null ? `${m.dns.p95_latency_ms} ms` : '—'}
                   bad={(m.dns.p95_latency_ms ?? 0) > 1000}
                 />
                 <HealthRow
-                  label="NXDOMAIN rate"
+                  label={t('engineer.dns.nxdomain_rate')}
                   value={`${(m.dns.nxdomain_rate * 100).toFixed(0)}%`}
                   bad={m.dns.nxdomain_rate > 0.3}
                 />
                 <div className="mt-4 border-t border-border pt-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                  MTU
+                  {t('engineer.mtu.title')}
                 </div>
                 <HealthRow
-                  label="Max packet size"
+                  label={t('engineer.mtu.max_packet')}
                   value={`${m.max_packet_size} B`}
                   bad={m.mtu_boundary_packets > 0}
                 />
                 <HealthRow
-                  label="Boundary packets"
+                  label={t('engineer.mtu.boundary_packets')}
                   value={String(m.mtu_boundary_packets)}
                   bad={m.mtu_boundary_packets > 0}
                 />
@@ -227,7 +231,7 @@ export function EngineerPage() {
 
           {/* Throughput charts */}
           <div className="grid grid-cols-2 gap-4">
-            <ChartCard title="Packets / sec">
+            <ChartCard title={t('engineer.chart.pps')}>
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={m.timeseries.pps}>
                   <defs>
@@ -258,7 +262,7 @@ export function EngineerPage() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Bandwidth (bps)">
+            <ChartCard title={t('engineer.chart.bandwidth')}>
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={m.timeseries.bandwidth}>
                   <defs>
@@ -292,7 +296,7 @@ export function EngineerPage() {
 
           {/* Protocol distribution + top talkers */}
           <div className="grid grid-cols-2 gap-4">
-            <ChartCard title="Protocol distribution">
+            <ChartCard title={t('engineer.chart.protocols')}>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={Object.entries(m.protocol_distribution).map(([name, count]) => ({ name, count }))}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -317,7 +321,7 @@ export function EngineerPage() {
 
             <div className="rounded-xl border border-border bg-surface-2/50 p-4">
               <div className="mb-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Top talkers
+                {t('engineer.top_talkers')}
               </div>
               <div className="space-y-1.5">
                 {m.top_talkers.slice(0, 8).map((t) => {
@@ -375,9 +379,9 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   )
 }
 
-function formatBps(bps: number): string {
-  if (bps > 1e9) return `${(bps / 1e9).toFixed(1)} Gbps`
-  if (bps > 1e6) return `${(bps / 1e6).toFixed(1)} Mbps`
-  if (bps > 1e3) return `${(bps / 1e3).toFixed(1)} Kbps`
-  return `${bps.toFixed(0)} bps`
+function formatBps(bps: number, t: (key: string) => string): string {
+  if (bps > 1e9) return `${(bps / 1e9).toFixed(1)} ${t('engineer.unit.gbps')}`
+  if (bps > 1e6) return `${(bps / 1e6).toFixed(1)} ${t('engineer.unit.mbps')}`
+  if (bps > 1e3) return `${(bps / 1e3).toFixed(1)} ${t('engineer.unit.kbps')}`
+  return `${bps.toFixed(0)} ${t('engineer.unit.bps')}`
 }

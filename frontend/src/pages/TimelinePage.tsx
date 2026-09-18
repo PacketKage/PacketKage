@@ -7,6 +7,7 @@ import { EvidenceTable } from '../components/EvidenceTable'
 import { EmptyState, ErrorState, Pagination } from '../components/states'
 import { SkeletonRow, SkeletonStatus, formatTime } from '../components/ui'
 import { useDebouncedValue, useSelectedCapture } from '../hooks/captures'
+import { useT } from '../i18n/LocaleContext'
 import type { TimelineEvent } from '../types/api'
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -20,6 +21,7 @@ const PAGE_SIZE = 200
 
 export function TimelinePage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [host, setHost] = useState('')
   const [eventType, setEventType] = useState('')
   const [severity, setSeverity] = useState('')
@@ -44,56 +46,54 @@ export function TimelinePage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Timeline</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        Chronological events — filter to &quot;everything related to X between T1 and T2&quot;.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('timeline.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('timeline.subtitle')}</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
         <input
           value={host}
           onChange={(e) => { setHost(e.target.value); setOffset(0) }}
-          placeholder="host / IP / domain…"
-          aria-label="Filter by host"
+          placeholder={t('timeline.host_placeholder')}
+          aria-label={t('timeline.filter_host')}
           className="w-56 rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg placeholder-fg-subtle focus:border-info/50 focus:outline-none"
         />
         <select
           value={eventType}
           onChange={(e) => { setEventType(e.target.value); setOffset(0) }}
-          aria-label="Filter by event type"
+          aria-label={t('timeline.filter_type')}
           className="rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg"
         >
-          <option value="">all types</option>
-          <option value="dns_query">DNS queries</option>
-          <option value="dns_response">DNS responses</option>
-          <option value="tcp_connect">TCP connections</option>
-          <option value="udp_session">UDP sessions</option>
-          <option value="http_request">HTTP</option>
-          <option value="tls_handshake">TLS</option>
-          <option value="flow_failed">failures</option>
-          <option value="tcp_reset">resets</option>
-          <option value="alert">alerts</option>
+          <option value="">{t('timeline.all_types')}</option>
+          <option value="dns_query">{t('timeline.type.dns_query')}</option>
+          <option value="dns_response">{t('timeline.type.dns_response')}</option>
+          <option value="tcp_connect">{t('timeline.type.tcp_connect')}</option>
+          <option value="udp_session">{t('timeline.type.udp_session')}</option>
+          <option value="http_request">{t('timeline.type.http_request')}</option>
+          <option value="tls_handshake">{t('timeline.type.tls_handshake')}</option>
+          <option value="flow_failed">{t('timeline.type.flow_failed')}</option>
+          <option value="tcp_reset">{t('timeline.type.tcp_reset')}</option>
+          <option value="alert">{t('timeline.type.alert')}</option>
         </select>
         <select
           value={severity}
           onChange={(e) => { setSeverity(e.target.value); setOffset(0) }}
-          aria-label="Filter by severity"
+          aria-label={t('timeline.filter_severity')}
           className="rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg"
         >
-          <option value="">any severity</option>
-          <option value="critical">critical</option>
-          <option value="high">high</option>
-          <option value="medium">medium</option>
+          <option value="">{t('timeline.any_severity')}</option>
+          <option value="critical">{t('timeline.severity.critical')}</option>
+          <option value="high">{t('timeline.severity.high')}</option>
+          <option value="medium">{t('timeline.severity.medium')}</option>
         </select>
       </div>
 
       {!analyzed.length ? (
         <div className="rounded-xl border border-border bg-surface-2/50 p-12 text-center text-sm text-fg-subtle">
-          No analyzed captures yet.
+          {t('timeline.empty.no_analyzed')}
         </div>
       ) : isLoading ? (
-        <SkeletonStatus label="Building timeline…">
+        <SkeletonStatus label={t('timeline.skeleton')}>
           <div
             className="overflow-hidden rounded-xl border border-border bg-surface-2/50"
             aria-hidden
@@ -113,13 +113,13 @@ export function TimelinePage() {
           </div>
         </SkeletonStatus>
       ) : isError ? (
-        <ErrorState message="Failed to load timeline events." onRetry={() => refetch()} />
+        <ErrorState message={t('timeline.error')} onRetry={() => refetch()} />
       ) : !events.length ? (
-        <EmptyState>No events match the current filters.</EmptyState>
+        <EmptyState>{t('timeline.empty.no_events')}</EmptyState>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-surface-2/50">
           <div className="border-b border-border px-4 py-3 text-sm text-fg-muted">
-            {(page?.total ?? 0).toLocaleString()} events
+            {t('timeline.events_count', { count: page?.total ?? 0 })}
           </div>
           <EventList events={events} onSelect={setSelected} />
           {page && (
@@ -183,6 +183,7 @@ function EventDetailModal({
   event: TimelineEvent
   onClose: () => void
 }) {
+  const t = useT()
   const { data: flow } = useQuery({
     queryKey: ['flow', event.related_flow_id],
     queryFn: () => api.getFlow(event.related_flow_id!),
@@ -197,22 +198,22 @@ function EventDetailModal({
     >
       <div className="space-y-4 p-5">
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <Field label="Source" value={event.source_ip ?? '—'} />
+            <Field label={t('timeline.detail.source')} value={event.source_ip ?? '—'} />
             <Field
-              label="Destination"
+              label={t('timeline.detail.destination')}
               value={
                 event.destination_ip
                   ? `${event.destination_ip}${event.destination_port ? ':' + event.destination_port : ''}`
                   : '—'
               }
             />
-            <Field label="Protocol" value={event.protocol ?? '—'} />
-            <Field label="Domain" value={event.domain ?? '—'} />
+            <Field label={t('timeline.detail.protocol')} value={event.protocol ?? '—'} />
+            <Field label={t('timeline.detail.domain')} value={event.domain ?? '—'} />
           </div>
 
           <div>
             <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-              Detail
+              {t('timeline.detail.title')}
             </div>
             <div className="overflow-auto rounded-lg bg-bg/60 p-3 ring-1 ring-border">
               <EvidenceTable data={event.detail} />
@@ -222,13 +223,17 @@ function EventDetailModal({
           {flow && (
             <div>
               <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                Related flow evidence
+                {t('timeline.detail.related_flow')}
               </div>
               <div className="rounded-lg bg-bg/60 p-3 font-mono text-xs text-fg-muted ring-1 ring-border">
-                {flow.source_ip}:{flow.source_port} → {flow.destination_ip}:{flow.destination_port}{' '}
-                {flow.transport_protocol}
-                {' · '}
-                {flow.packets} packets, {flow.bytes} bytes, state {flow.tcp_state ?? 'n/a'}
+                {t('timeline.detail.flow_info', {
+                  source: `${flow.source_ip}:${flow.source_port}`,
+                  destination: `${flow.destination_ip}:${flow.destination_port}`,
+                  protocol: flow.transport_protocol,
+                  packets: flow.packets,
+                  bytes: flow.bytes,
+                  state: flow.tcp_state ?? t('timeline.detail.state_na'),
+                })}
               </div>
             </div>
           )}

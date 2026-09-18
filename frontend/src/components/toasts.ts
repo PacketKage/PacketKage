@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { api, apiErrorMessage } from '../api/client'
+import { translate } from '../i18n/locale'
 
 /**
  * Shared toast feedback for user-triggered API mutations.
@@ -19,7 +20,11 @@ export function mutateSuccess(message: string, id?: string) {
 
 export function mutateError(action: string, err: unknown, id?: string) {
   const detail = apiErrorMessage(err)
-  const message = detail === 'Request failed' ? `${action} failed` : `${action} failed — ${detail}`
+  const failed = translate('toast.failed_suffix', { action })
+  const message =
+    detail === translate('error.request_failed')
+      ? failed
+      : translate('toast.failed_with_detail', { action, detail })
   toast.error(message, id ? { id } : undefined)
 }
 
@@ -52,15 +57,18 @@ export function watchJobForToast(jobId: string) {
         const packets = job.result?.packets
         mutateSuccess(
           packets != null
-            ? `Analysis completed — ${packets.toLocaleString()} packets`
-            : 'Analysis completed',
+            ? translate('toast.analysis_completed', { packets: packets.toLocaleString() })
+            : translate('toast.analysis_completed_short'),
           `job-${job.id}`,
         )
       } else {
         const detail = job.message || job.stage
-        toast.error(detail ? `Analysis failed — ${detail}` : 'Analysis failed', {
-          id: `job-${job.id}`,
-        })
+        toast.error(
+          detail
+            ? translate('toast.analysis_failed', { detail })
+            : translate('toast.analysis_failed_short'),
+          { id: `job-${job.id}` },
+        )
       }
     },
     () => {

@@ -13,6 +13,7 @@ import { ErrorState } from '../components/states'
 import { Badge, SkeletonRow, Spinner } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useTheme } from '../hooks/theme'
+import { useT } from '../i18n/LocaleContext'
 import type {
   GraphNodeKind,
   GraphProvenance,
@@ -107,20 +108,27 @@ const PROVENANCE_LINE: Record<GraphProvenance, 'solid' | 'dashed' | 'dotted'> = 
   enriched: 'dotted',
 }
 
-const RELATIONSHIP_LABELS: Record<string, string> = {
-  DNS_QUERY: 'dns query',
-  RESOLVES_TO: 'resolves to',
-  TLS_SNI: 'tls sni',
-  HTTP_HOST: 'http host',
-  FLOW: 'flow',
-  EXPOSES: 'exposes',
-  TRIGGERED: 'triggered',
-  TARGETS: 'targets',
-  GROUPS: 'groups',
-  INCLUDES: 'includes',
+const RELATIONSHIP_KEYS: Record<string, string> = {
+  DNS_QUERY: 'graph.relationship.dns_query',
+  RESOLVES_TO: 'graph.relationship.resolves_to',
+  TLS_SNI: 'graph.relationship.tls_sni',
+  HTTP_HOST: 'graph.relationship.http_host',
+  FLOW: 'graph.relationship.flow',
+  EXPOSES: 'graph.relationship.exposes',
+  TRIGGERED: 'graph.relationship.triggered',
+  TARGETS: 'graph.relationship.targets',
+  GROUPS: 'graph.relationship.groups',
+  INCLUDES: 'graph.relationship.includes',
 }
 
-const relationshipLabel = (r: string) => RELATIONSHIP_LABELS[r] ?? r.replaceAll('_', ' ').toLowerCase()
+const PROV_KEYS: Record<GraphProvenance, string> = {
+  observed: 'graph_panels.provenance.observed',
+  correlated: 'graph_panels.provenance.correlated',
+  enriched: 'graph_panels.provenance.enriched',
+}
+
+const relationshipLabel = (r: string, t: (key: string) => string) =>
+  RELATIONSHIP_KEYS[r] ? t(RELATIONSHIP_KEYS[r]) : r.replaceAll('_', ' ').toLowerCase()
 
 // Backend caps (mirrors GraphCaps in evidence_graph.py).
 const CANVAS_DEFAULT_LIMIT = 300
@@ -128,7 +136,7 @@ const CANVAS_HARD_LIMIT = 1000
 
 type RelationGroup = { relationship: string; color: string; label: string; count: number }
 
-function buildRelationGroups(graph: GraphV2): RelationGroup[] {
+function buildRelationGroups(graph: GraphV2, t: (key: string) => string): RelationGroup[] {
   const counts = new Map<string, number>()
   for (const e of graph.edges) {
     counts.set(e.relationship, (counts.get(e.relationship) ?? 0) + 1)
@@ -138,7 +146,7 @@ function buildRelationGroups(graph: GraphV2): RelationGroup[] {
     .map(([relationship, count]) => ({
       relationship,
       color: RELATIONSHIP_COLORS[relationship] ?? '#94a3b8',
-      label: relationshipLabel(relationship),
+      label: relationshipLabel(relationship, t),
       count,
     }))
 }
@@ -171,12 +179,12 @@ function toggleInSet<T extends string>(current: Iterable<T>, name: T): Set<T> {
 
 export type GraphMode = 'investigate' | 'attack-path' | 'blast' | 'timeline' | 'evidence'
 
-const MODES: { id: GraphMode; label: string }[] = [
-  { id: 'investigate', label: 'Investigate' },
-  { id: 'attack-path', label: 'Attack Path' },
-  { id: 'blast', label: 'Blast Radius' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'evidence', label: 'Evidence' },
+const MODES: { id: GraphMode; labelKey: string }[] = [
+  { id: 'investigate', labelKey: 'graph.mode.investigate' },
+  { id: 'attack-path', labelKey: 'graph.mode.attack_path' },
+  { id: 'blast', labelKey: 'graph.mode.blast' },
+  { id: 'timeline', labelKey: 'graph.mode.timeline' },
+  { id: 'evidence', labelKey: 'graph.mode.evidence' },
 ]
 
 /**
@@ -188,16 +196,15 @@ const MODES: { id: GraphMode; label: string }[] = [
 export function GraphPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
   const [mode, setMode] = useState<GraphMode>('investigate')
+  const t = useT()
 
   return (
     <div className="flex h-full flex-col p-8">
       {/* header: title + capture picker */}
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-        <h1 className="text-2xl font-semibold text-fg">Network Graph</h1>
+        <h1 className="text-2xl font-semibold text-fg">{t('graph.title')}</h1>
         {analyzed.length > 0 && (
-          <span className="text-xs text-fg-subtle">
-            Evidence-backed investigation workspace
-          </span>
+          <span className="text-xs text-fg-subtle">{t('graph.subtitle')}</span>
         )}
         <div className="ml-auto">
           <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
@@ -205,7 +212,7 @@ export function GraphPage() {
       </div>
 
       {/* mode toolbar */}
-      <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Graph investigation modes">
+      <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label={t('graph.modes_aria')}>
         {MODES.map((m) => (
           <button
             key={m.id}
@@ -218,7 +225,7 @@ export function GraphPage() {
                 : 'text-fg-muted ring-border-strong hover:text-fg'
             }`}
           >
-            {m.label}
+            {t(m.labelKey)}
           </button>
         ))}
       </div>
@@ -240,6 +247,7 @@ export function GraphPage() {
 // ---------------- Attack Path mode ----------------
 
 function AttackPathMode({ captureId }: { captureId: string | null }) {
+  const t = useT()
   const { data: graph } = useQuery({
     queryKey: ['evidenceGraph', captureId],
     queryFn: () => api.getEvidenceGraph(captureId!),
@@ -264,34 +272,34 @@ function AttackPathMode({ captureId }: { captureId: string | null }) {
     )
   }
   if (!hosts.length) {
-    return <ErrorlessEmpty text="No hosts in this capture — nothing to traverse." />
+    return <ErrorlessEmpty text={t('graph.attack.no_hosts')} />
   }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-2/50 p-4">
         <label className="text-xs text-fg-subtle">
-          Source host
+          {t('graph.attack.source')}
           <select
-            aria-label="Source host"
+            aria-label={t('graph.attack.source')}
             value={source}
             onChange={(e) => setSource(e.target.value)}
             className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
           >
-            <option value="">select…</option>
+            <option value="">{t('common.select')}</option>
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>{h.label}</option>
             ))}
           </select>
         </label>
         <label className="text-xs text-fg-subtle">
-          Target host
+          {t('graph.attack.target')}
           <select
-            aria-label="Target host"
+            aria-label={t('graph.attack.target')}
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
           >
-            <option value="">select…</option>
+            <option value="">{t('common.select')}</option>
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>{h.label}</option>
             ))}
@@ -302,33 +310,30 @@ function AttackPathMode({ captureId }: { captureId: string | null }) {
           onClick={() => setQuery({ source, target })}
           className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
         >
-          Find paths
+          {t('graph.attack.find_paths')}
         </button>
-        <p className="ml-auto max-w-sm text-xs text-fg-subtle">
-          Bounded traversal (depth ≤ 4, max 3 paths) over observed relationships
-          only — the path itself is an inference, every hop is evidence.
-        </p>
+        <p className="ml-auto max-w-sm text-xs text-fg-subtle">{t('graph.attack.hint')}</p>
       </div>
 
       {isLoading && <div className="p-6 text-center"><Spinner size={20} /></div>}
-      {isError && <ErrorState message="Path search failed." />}
+      {isError && <ErrorState message={t('graph.attack.search_failed')} />}
       {paths && (
         <div className="space-y-3">
           {paths.paths.length === 0 && (
             <ErrorlessEmpty
               text={
                 paths.reason === 'unknown node'
-                  ? 'One of the selected hosts has no observed relationships.'
-                  : `No path of observed relationships connects these hosts within depth 4.`
+                  ? t('graph.attack.unknown_node')
+                  : t('graph.attack.no_path')
               }
             />
           )}
           {paths.paths.map((p, i) => (
             <div key={i} className="rounded-xl border border-border bg-surface-2/50 p-4">
               <div className="mb-2 flex items-center gap-2">
-                <Badge tone="accent">path {i + 1}</Badge>
-                <Badge tone="neutral">{p.length} hop{p.length === 1 ? '' : 's'}</Badge>
-                <Badge tone="warning">inferred</Badge>
+                <Badge tone="accent">{t('graph.attack.path', { n: i + 1 })}</Badge>
+                <Badge tone="neutral">{t('graph.attack.hops', { count: p.length })}</Badge>
+                <Badge tone="warning">{t('graph.attack.inferred')}</Badge>
               </div>
               <ol className="flex flex-wrap items-center gap-2">
                 {p.nodes.map((nid, j) => {
@@ -346,7 +351,7 @@ function AttackPathMode({ captureId }: { captureId: string | null }) {
             </div>
           ))}
           {paths.truncated && (
-            <p className="text-xs text-fg-subtle">Traversal hit its bound — more paths may exist.</p>
+            <p className="text-xs text-fg-subtle">{t('graph.attack.truncated')}</p>
           )}
         </div>
       )}
@@ -357,6 +362,7 @@ function AttackPathMode({ captureId }: { captureId: string | null }) {
 // ---------------- Blast Radius mode ----------------
 
 function BlastRadiusMode({ captureId }: { captureId: string | null }) {
+  const t = useT()
   const { data: graph } = useQuery({
     queryKey: ['evidenceGraph', captureId],
     queryFn: () => api.getEvidenceGraph(captureId!),
@@ -381,29 +387,29 @@ function BlastRadiusMode({ captureId }: { captureId: string | null }) {
     )
   }
   if (!hosts.length) {
-    return <ErrorlessEmpty text="No hosts in this capture — no blast radius to compute." />
+    return <ErrorlessEmpty text={t('graph.blast.no_hosts')} />
   }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface-2/50 p-4">
         <label className="text-xs text-fg-subtle">
-          Start host
+          {t('graph.blast.start')}
           <select
-            aria-label="Blast radius start host"
+            aria-label={t('graph.blast.aria_start')}
             value={host}
             onChange={(e) => setHost(e.target.value)}
             className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
           >
-            <option value="">select…</option>
+            <option value="">{t('common.select')}</option>
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>{h.label}</option>
             ))}
           </select>
         </label>
         <label className="text-xs text-fg-subtle">
-          Depth
+          {t('graph.blast.depth')}
           <select
-            aria-label="Blast radius depth"
+            aria-label={t('graph.blast.aria_depth')}
             value={depth}
             onChange={(e) => setDepth(Number(e.target.value))}
             className="mt-1 block rounded-lg border border-border-strong bg-surface-2 px-2 py-1.5 text-xs text-fg"
@@ -418,30 +424,27 @@ function BlastRadiusMode({ captureId }: { captureId: string | null }) {
           onClick={() => setQuery({ host, depth })}
           className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
         >
-          Compute blast radius
+          {t('graph.blast.compute')}
         </button>
-        <p className="ml-auto max-w-sm text-xs text-fg-subtle">
-          Bounded BFS (depth ≤ 3, node caps) over observed relationships —
-          reachability summary only, no simulated impact.
-        </p>
+        <p className="ml-auto max-w-sm text-xs text-fg-subtle">{t('graph.blast.hint')}</p>
       </div>
 
       {isLoading && <div className="p-6 text-center"><Spinner size={20} /></div>}
-      {isError && <ErrorState message="Blast radius request failed." />}
+      {isError && <ErrorState message={t('graph.blast.failed')} />}
       {blast && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <SummaryCard label="Reachable nodes" value={blast.summary.reachable_nodes} />
-            <SummaryCard label="Alert-flagged" value={blast.summary.alert_flagged.length} tone="red" />
-            <SummaryCard label="Hosts" value={blast.summary.by_kind.host ?? 0} />
-            <SummaryCard label="Domains" value={blast.summary.by_kind.domain ?? 0} />
+            <SummaryCard label={t('graph.blast.reachable')} value={blast.summary.reachable_nodes} />
+            <SummaryCard label={t('graph.blast.alert_flagged')} value={blast.summary.alert_flagged.length} tone="red" />
+            <SummaryCard label={t('graph.blast.hosts')} value={blast.summary.by_kind.host ?? 0} />
+            <SummaryCard label={t('graph.blast.domains')} value={blast.summary.by_kind.domain ?? 0} />
           </div>
           {Object.entries(blast.rings)
             .sort(([a], [b]) => Number(a) - Number(b))
             .map(([ring, ids]) => (
               <div key={ring} className="rounded-xl border border-border bg-surface-2/50 p-4">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Hop {ring} — {ids.length} node{ids.length === 1 ? '' : 's'}
+                  {t('graph.blast.hop', { ring, count: ids.length })}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {ids.map((nid) => {
@@ -465,9 +468,7 @@ function BlastRadiusMode({ captureId }: { captureId: string | null }) {
               </div>
             ))}
           {blast.truncated && (
-            <p className="text-xs text-warning">
-              Result hit the node cap — increase filters or reduce depth for full coverage.
-            </p>
+            <p className="text-xs text-warning">{t('graph.blast.truncated')}</p>
           )}
         </div>
       )}
@@ -489,22 +490,26 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
 // ---------------- Timeline mode ----------------
 
 function TimelineMode({ captureId }: { captureId: string | null }) {
+  const t = useT()
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['graphTimeline', captureId],
     queryFn: () => api.getTimeline(captureId!, { limit: 500 }),
     enabled: !!captureId,
   })
   if (isLoading) return <div className="p-6 text-center"><Spinner size={20} /></div>
-  if (isError) return <ErrorState message="Timeline request failed." onRetry={() => void refetch()} />
-  if (!data) return <ErrorlessEmpty text="Select an analyzed capture." />
+  if (isError) return <ErrorState message={t('graph.timeline.failed')} onRetry={() => void refetch()} />
+  if (!data) return <ErrorlessEmpty text={t('graph.select_capture')} />
   const events = data.items
   if (!events.length) {
-    return <ErrorlessEmpty text="No timeline events in this capture." />
+    return <ErrorlessEmpty text={t('graph.timeline.empty')} />
   }
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface-2/50">
       <div className="border-b border-border px-4 py-3 text-sm font-medium text-fg">
-        Chronological event stream ({data.total.toLocaleString()} events, showing first {events.length})
+        {t('graph.timeline.stream', {
+          total: data.total.toLocaleString(),
+          shown: events.length,
+        })}
       </div>
       <div className="max-h-[60vh] divide-y divide-border/60 overflow-y-auto">
         {events.map((ev) => (
@@ -517,7 +522,7 @@ function TimelineMode({ captureId }: { captureId: string | null }) {
             </Badge>
             <span className="min-w-0 flex-1 truncate text-fg-muted">{ev.label}</span>
             {ev.related_alert_id && (
-              <span className="shrink-0 font-mono text-fg-subtle">alert {ev.related_alert_id.slice(0, 8)}</span>
+              <span className="shrink-0 font-mono text-fg-subtle">{t('graph.timeline.alert', { id: ev.related_alert_id.slice(0, 8) })}</span>
             )}
           </div>
         ))}
@@ -529,14 +534,15 @@ function TimelineMode({ captureId }: { captureId: string | null }) {
 // ---------------- Evidence mode ----------------
 
 function EvidenceMode({ captureId }: { captureId: string | null }) {
+  const t = useT()
   const { data: graph, isLoading, isError, refetch } = useQuery({
     queryKey: ['evidenceGraph', captureId],
     queryFn: () => api.getEvidenceGraph(captureId!),
     enabled: !!captureId,
   })
   if (isLoading) return <div className="p-6 text-center"><Spinner size={20} /></div>
-  if (isError) return <ErrorState message="Evidence graph request failed." onRetry={() => void refetch()} />
-  if (!graph) return <ErrorlessEmpty text="Select an analyzed capture." />
+  if (isError) return <ErrorState message={t('graph.evidence.failed')} onRetry={() => void refetch()} />
+  if (!graph) return <ErrorlessEmpty text={t('graph.select_capture')} />
   return (
     <div className="max-h-full overflow-y-auto pr-1">
       <EvidenceChainList graph={graph} captureId={captureId!} />
@@ -570,6 +576,7 @@ function InvestigateCanvas({
 }) {
   const { analyzed } = useSelectedCapture()
   const { theme } = useTheme()
+  const t = useT()
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<GraphV2Edge | null>(null)
   // null = all enabled (fresh capture); user toggles carve out exclusions.
@@ -605,17 +612,17 @@ function InvestigateCanvas({
   }, [effectiveCaptureId])
 
   const relationGroups = useMemo(
-    () => (graph ? buildRelationGroups(graph) : []),
-    [graph],
+    () => (graph ? buildRelationGroups(graph, t) : []),
+    [graph, t],
   )
 
   // One-tap filter presets: All (default), Observed-only (solid lines) and
   // Alert-focused (alert + incident backbone).
   type Preset = 'all' | 'observed' | 'alerts'
-  const PRESETS: { id: Preset; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'observed', label: 'Observed' },
-    { id: 'alerts', label: 'Alerts' },
+  const PRESETS: { id: Preset; labelKey: string }[] = [
+    { id: 'all', labelKey: 'graph.preset.all' },
+    { id: 'observed', labelKey: 'graph.preset.observed' },
+    { id: 'alerts', labelKey: 'graph.preset.alerts' },
   ]
   const applyPreset = (preset: Preset) => {
     if (preset === 'all') {
@@ -891,18 +898,23 @@ function InvestigateCanvas({
       {graph && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
           <span>
-            {graph.stats.node_count} nodes · {graph.stats.edge_count} edges ·{' '}
-            <span className="text-danger">{graph.stats.alert_backed_edges} alert-backed</span>
+            {t('graph.canvas.stats_n_e', {
+              nodes: graph.stats.node_count,
+              edges: graph.stats.edge_count,
+            })} ·{' '}
+            <span className="text-danger">
+              {t('graph.canvas.stats_alert', { alerts: graph.stats.alert_backed_edges })}
+            </span>
           </span>
           <span className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-muted">{tier}</span>
           <button
             onClick={() => cyRef.current?.fit(undefined, 30)}
-            aria-label="Fit graph to view"
+            aria-label={t('graph.canvas.fit_aria')}
             className="rounded bg-surface-3 px-1.5 py-0.5 text-fg-muted transition hover:text-fg"
           >
-            fit view
+            {t('graph.canvas.fit')}
           </button>
-          <span className="ml-auto">click an edge for provenance · click a node for detail</span>
+          <span className="ml-auto">{t('graph.canvas.hint')}</span>
         </div>
       )}
 
@@ -915,10 +927,10 @@ function InvestigateCanvas({
             {/* search: locate a node by label / id / ip and jump to it */}
             <div className="relative mb-2">
               <input
-                aria-label="Search graph nodes"
+                aria-label={t('graph.canvas.search_aria')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Find node…"
+                placeholder={t('graph.canvas.search_placeholder')}
                 className="w-full rounded border border-border-strong bg-bg px-2 py-1 text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none"
               />
               {searchQuery.trim() !== '' && (
@@ -939,7 +951,7 @@ function InvestigateCanvas({
                       </button>
                     ))
                   ) : (
-                    <div className="px-2 py-1 text-fg-muted">no matches</div>
+                    <div className="px-2 py-1 text-fg-muted">{t('graph.canvas.no_matches')}</div>
                   )}
                 </div>
               )}
@@ -958,12 +970,12 @@ function InvestigateCanvas({
                       : 'text-fg-muted ring-border-strong hover:text-fg'
                   }`}
                 >
-                  {p.label}
+                  {t(p.labelKey)}
                 </button>
               ))}
             </div>
 
-            <div className="mb-1 font-medium text-fg-muted">Nodes</div>
+            <div className="mb-1 font-medium text-fg-muted">{t('graph.canvas.nodes')}</div>
             {graph.stats.node_count > 0 && activeKindFilters.size > 0 && (
               <div>
                 {([...activeKindFilters].sort() as GraphNodeKind[]).map((kind) => {
@@ -994,7 +1006,7 @@ function InvestigateCanvas({
               </div>
             )}
 
-            <div className="mb-1 mt-2 font-medium text-fg-muted">Edges</div>
+            <div className="mb-1 mt-2 font-medium text-fg-muted">{t('graph.canvas.edges')}</div>
             {relationGroups.length > 0 && (
               <div>
                 {relationGroups.map((g) => {
@@ -1019,7 +1031,7 @@ function InvestigateCanvas({
               </div>
             )}
 
-            <div className="mb-1 mt-2 font-medium text-fg-muted">Provenance</div>
+            <div className="mb-1 mt-2 font-medium text-fg-muted">{t('graph.canvas.provenance')}</div>
             {graph.edges.length > 0 && (
               <div>
                 {(['observed', 'correlated', 'enriched'] as GraphProvenance[]).map((prov) => {
@@ -1035,7 +1047,7 @@ function InvestigateCanvas({
                       }`}
                     >
                       <span className="inline-block h-2.5 w-5 border-t-2 border-fg-subtle" style={{ borderStyle: PROVENANCE_LINE[prov] }} />
-                      <span className="flex-1">{prov}</span>
+                      <span className="flex-1">{t(PROV_KEYS[prov])}</span>
                       <span className="text-fg-subtle">{count}</span>
                     </button>
                   )
@@ -1048,13 +1060,13 @@ function InvestigateCanvas({
                 onClick={() => setShowLeaves(true)}
                 className="mt-2 block w-full rounded border border-border-strong px-1.5 py-1 text-left text-fg-muted hover:border-fg-subtle hover:text-fg"
               >
-                {visible.hiddenLeafCount} leaf domains hidden — show
+                {t('graph.canvas.leaves_hidden', { count: visible.hiddenLeafCount })}
               </button>
             )}
             <div className="mt-2 border-t border-border pt-1.5 text-fg-subtle">
               {visible.elements.length > 0
-                ? `${visible.elements.length} shown`
-                : 'nothing matches filters'}
+                ? t('graph.canvas.shown', { count: visible.elements.length })
+                : t('graph.canvas.nothing')}
             </div>
           </div>
         )}
@@ -1070,7 +1082,7 @@ function InvestigateCanvas({
                   </div>
                   <button
                     onClick={() => setSelectedEdge(null)}
-                    aria-label="Close inspector"
+                    aria-label={t('graph.canvas.close_inspector')}
                     className="ml-2 shrink-0 text-fg-subtle hover:text-fg-muted"
                   >
                     ✕
@@ -1106,9 +1118,9 @@ function InvestigateCanvas({
           <div
             className="absolute inset-0 flex items-center justify-center"
             role="status"
-            aria-label="Building graph…"
+            aria-label={t('graph.canvas.building')}
           >
-            <span className="sr-only">Building graph…</span>
+            <span className="sr-only">{t('graph.canvas.building')}</span>
             {analyzed.length ? (
               <div className="h-full w-full p-12" aria-hidden>
                 <div className="relative h-full w-full overflow-hidden rounded-lg">
@@ -1128,13 +1140,13 @@ function InvestigateCanvas({
                 </div>
               </div>
             ) : (
-              <span className="text-sm text-fg-subtle">No analyzed captures yet.</span>
+              <span className="text-sm text-fg-subtle">{t('graph.canvas.no_analyzed')}</span>
             )}
           </div>
         )}
         {isError && !graph && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <ErrorState message="Graph request failed." onRetry={() => void refetch()} />
+            <ErrorState message={t('graph.canvas.failed')} onRetry={() => void refetch()} />
           </div>
         )}
       </div>
@@ -1143,8 +1155,11 @@ function InvestigateCanvas({
       {graph && (
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
           <span>
-            showing {visible.visibleIds.size} of {graph.stats.total_nodes ?? graph.stats.node_count} nodes ·{' '}
-            {graph.stats.total_edges_in_capture} edges in capture
+            {t('graph.canvas.status', {
+              shown: visible.visibleIds.size,
+              total: graph.stats.total_nodes ?? graph.stats.node_count,
+              edges: graph.stats.total_edges_in_capture,
+            })}
           </span>
           {['observed', 'correlated', 'enriched'].map((prov) => {
             const count = graph.edges.filter((e) => e.provenance === prov).length
@@ -1155,7 +1170,7 @@ function InvestigateCanvas({
                   className="inline-block h-2.5 w-5 border-t-2 border-fg-subtle"
                   style={{ borderStyle: PROVENANCE_LINE[prov as GraphProvenance] }}
                 />
-                {prov} {count}
+                {t(PROV_KEYS[prov as GraphProvenance])} {count}
               </span>
             )
           })}
@@ -1165,7 +1180,7 @@ function InvestigateCanvas({
               disabled={limit >= CANVAS_HARD_LIMIT}
               className="rounded bg-accent/10 px-2 py-0.5 font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:pointer-events-none disabled:opacity-50"
             >
-              load more nodes
+              {t('graph.canvas.load_more')}
             </button>
           )}
         </div>

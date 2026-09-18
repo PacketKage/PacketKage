@@ -19,6 +19,30 @@
         }
       })();
     </script>
+    <script>
+      // Resolve language before first paint (no flash of wrong locale)
+      (function () {
+        function pick(raw) {
+          var tag = String(raw || '').trim().toLowerCase();
+          return tag === 'fr' || tag.indexOf('fr-') === 0 || tag.indexOf('fr_') === 0 ? 'fr' : 'en';
+        }
+        var locale = 'en';
+        try {
+          var saved = localStorage.getItem('packetkage-locale');
+          if (saved) locale = pick(saved);
+        } catch (e) {
+          /* storage unavailable — fall through */
+        }
+        if (locale === 'en') {
+          var nav = (navigator.languages || [navigator.language]).filter(Boolean);
+          for (var i = 0; i < nav.length; i++) {
+            var l = pick(nav[i]);
+            if (l !== 'en') { locale = l; break; }
+          }
+        }
+        document.documentElement.setAttribute('lang', locale);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

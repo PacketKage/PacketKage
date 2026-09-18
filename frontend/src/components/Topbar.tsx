@@ -3,42 +3,48 @@ import { useLocation } from 'react-router-dom'
 import { LogOut, Tag } from 'lucide-react'
 import { Breadcrumbs } from './Breadcrumbs'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageToggle } from './LanguageToggle'
 import { Button } from './ui'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/LocaleContext'
 import version from '../../package.json'
 
-const ROUTE_TITLES: Record<string, string> = {
-  '': 'Dashboard',
-  capture: 'Capture',
-  flows: 'Flows',
-  hosts: 'Hosts',
-  protocol: 'Protocol Analysis',
-  timeline: 'Timeline',
-  graph: 'Graph',
-  alerts: 'Alerts',
-  cases: 'Cases',
-  replay: 'Replay',
-  engineer: 'Engineer Mode',
-  admin: 'Admin',
+/** Route section → i18n key for page titles and breadcrumbs. */
+const ROUTE_TITLE_KEYS: Record<string, string> = {
+  '': 'topbar.route.dashboard',
+  capture: 'topbar.route.capture',
+  flows: 'topbar.route.flows',
+  hosts: 'topbar.route.hosts',
+  protocol: 'topbar.route.protocol',
+  timeline: 'topbar.route.timeline',
+  graph: 'topbar.route.graph',
+  alerts: 'topbar.route.alerts',
+  cases: 'topbar.route.cases',
+  replay: 'topbar.route.replay',
+  engineer: 'topbar.route.engineer',
+  admin: 'topbar.route.admin',
 }
 
 export const APP_VERSION: string = (version as { version?: string }).version ?? '0.0.0'
-/** Derives the page title from the current route. */
+/** Derives the page title from the current route, localised. */
 export function usePageTitle(): string {
   const { pathname } = useLocation()
+  const t = useT()
   const section = pathname.split('/').filter(Boolean)[0] ?? ''
-  return ROUTE_TITLES[section] ?? section.charAt(0).toUpperCase() + section.slice(1)
+  const key = ROUTE_TITLE_KEYS[section]
+  return key ? t(key) : section.charAt(0).toUpperCase() + section.slice(1)
 }
 
-/** App-shell topbar: breadcrumb + document.title sync, version, theme toggle. */
+/** App-shell topbar: breadcrumb + document.title sync, version, theme + language toggles. */
 export function Topbar() {
   const title = usePageTitle()
   const { user, isAdmin, signIn, signOut } = useAuth()
   const { pathname, search } = useLocation()
+  const t = useT()
 
   useEffect(() => {
-    document.title = `PacketKage · ${title}`
-  }, [title])
+    document.title = t('topbar.title', { title })
+  }, [t, title])
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface/80 px-6 backdrop-blur">
@@ -62,19 +68,20 @@ export function Topbar() {
                     : 'bg-surface-3 text-fg-subtle ring-border'
                 }`}
               >
-                {isAdmin ? 'Admin' : 'Analyst'}
+                {isAdmin ? t('topbar.role.admin') : t('topbar.role.analyst')}
               </span>
             </span>
             <Button variant="ghost" size="sm" onClick={() => void signOut()}>
               <LogOut size={13} aria-hidden />
-              Sign out
+              {t('topbar.sign_out')}
             </Button>
           </>
         ) : (
           <Button variant="ghost" size="sm" onClick={() => signIn(pathname + search || '/')}>
-            Sign in
+            {t('topbar.sign_in')}
           </Button>
         )}
+        <LanguageToggle />
         <ThemeToggle />
       </div>
     </header>

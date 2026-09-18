@@ -21,46 +21,49 @@ import { Logo } from './Logo'
 import { Topbar, APP_VERSION } from './Topbar'
 import { useTheme } from '../hooks/theme'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/LocaleContext'
 
 interface NavItem {
   to: string
-  label: string
+  /** i18n key for the label */
+  labelKey: string
   icon: LucideIcon
   end?: boolean
 }
 
 interface NavGroup {
-  label: string
+  /** i18n key for the group label */
+  labelKey: string
   items: NavItem[]
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Overview',
-    items: [{ to: '/', label: 'Dashboard', icon: Gauge, end: true }],
+    labelKey: 'nav.overview',
+    items: [{ to: '/', labelKey: 'nav.dashboard', icon: Gauge, end: true }],
   },
   {
-    label: 'Analyze',
+    labelKey: 'nav.analyze',
     items: [
-      { to: '/capture', label: 'Capture', icon: Radar },
-      { to: '/flows', label: 'Flows', icon: Table2 },
-      { to: '/hosts', label: 'Hosts', icon: Users },
-      { to: '/protocol', label: 'Protocol', icon: Activity },
+      { to: '/capture', labelKey: 'nav.capture', icon: Radar },
+      { to: '/flows', labelKey: 'nav.flows', icon: Table2 },
+      { to: '/hosts', labelKey: 'nav.hosts', icon: Users },
+      { to: '/protocol', labelKey: 'nav.protocol', icon: Activity },
     ],
   },
   {
-    label: 'Investigate',
+    labelKey: 'nav.investigate',
     items: [
-      { to: '/alerts', label: 'Alerts', icon: Bell },
-      { to: '/cases', label: 'Cases', icon: FolderOpen },
-      { to: '/timeline', label: 'Timeline', icon: PlayCircle },
-      { to: '/graph', label: 'Graph', icon: Network },
-      { to: '/replay', label: 'Replay', icon: Waypoints },
+      { to: '/alerts', labelKey: 'nav.alerts', icon: Bell },
+      { to: '/cases', labelKey: 'nav.cases', icon: FolderOpen },
+      { to: '/timeline', labelKey: 'nav.timeline', icon: PlayCircle },
+      { to: '/graph', labelKey: 'nav.graph', icon: Network },
+      { to: '/replay', labelKey: 'nav.replay', icon: Waypoints },
     ],
   },
   {
-    label: 'System',
-    items: [{ to: '/engineer', label: 'Engineer Mode', icon: ScanSearch }],
+    labelKey: 'nav.system',
+    items: [{ to: '/engineer', labelKey: 'nav.engineer', icon: ScanSearch }],
   },
 ]
 
@@ -78,6 +81,7 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(readInitialCollapsed)
   const { theme } = useTheme()
   const { isAdmin } = useAuth()
+  const t = useT()
 
   // The Admin link is visible only to admins (mirrors the backend's
   // admin-only endpoints; the route itself is wrapped in RequireAdmin).
@@ -85,8 +89,8 @@ export function Layout() {
     () =>
       isAdmin
         ? NAV_GROUPS.map((g) =>
-            g.label === 'System'
-              ? { ...g, items: [...g.items, { to: '/admin', label: 'Admin', icon: Shield }] }
+            g.labelKey === 'nav.system'
+              ? { ...g, items: [...g.items, { to: '/admin', labelKey: 'nav.admin', icon: Shield }] }
               : g,
           )
         : NAV_GROUPS,
@@ -118,7 +122,7 @@ export function Layout() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-accent-fg"
       >
-        Skip to content
+        {t('nav.skip_to_content')}
       </a>
 
       {/* Sidebar */}
@@ -128,7 +132,7 @@ export function Layout() {
         }`}
       >
         <div className="flex h-14 items-center border-b border-border px-4">
-          <NavLink to="/" aria-label="PacketKage home" className="flex items-center overflow-hidden">
+          <NavLink to="/" aria-label={t('nav.home')} className="flex items-center overflow-hidden">
             {collapsed ? (
               <Logo size={26} withWordmark={false} />
             ) : (
@@ -137,15 +141,15 @@ export function Layout() {
           </NavLink>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Main navigation">
+        <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label={t('nav.main_navigation')}>
           {navGroups.map((group) => (
-            <div key={group.label} className="mb-4 last:mb-0">
+            <div key={group.labelKey} className="mb-4 last:mb-0">
               <div
                 className={`mb-1.5 px-2.5 text-xs font-semibold uppercase tracking-wider text-fg-subtle ${
                   collapsed ? 'sr-only' : ''
                 }`}
               >
-                {group.label}
+                {t(group.labelKey)}
               </div>
               <ul className="space-y-1">
                 {group.items.map((item) => (
@@ -153,7 +157,7 @@ export function Layout() {
                     <NavLink
                       to={item.to}
                       end={item.end}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? t(item.labelKey) : undefined}
                       className={({ isActive }) =>
                         `group flex items-center rounded-lg px-2.5 py-2 text-sm transition-colors ${
                           isActive
@@ -163,7 +167,7 @@ export function Layout() {
                       }
                     >
                       <item.icon size={16} className="shrink-0" aria-hidden />
-                      <span className={`ml-2.5 truncate ${collapsed ? 'sr-only' : ''}`}>{item.label}</span>
+                      <span className={`ml-2.5 truncate ${collapsed ? 'sr-only' : ''}`}>{t(item.labelKey)}</span>
                     </NavLink>
                   </li>
                 ))}
@@ -177,7 +181,7 @@ export function Layout() {
             <button
               type="button"
               onClick={() => setCollapsed(false)}
-              aria-label="Expand sidebar"
+              aria-label={t('nav.expand_sidebar')}
               aria-keyshortcuts="["
               className="mx-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
             >
@@ -189,7 +193,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => setCollapsed(true)}
-                aria-label="Collapse sidebar"
+                aria-label={t('nav.collapse_sidebar')}
                 aria-keyshortcuts="["
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
               >

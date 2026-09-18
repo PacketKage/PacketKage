@@ -3,10 +3,13 @@
  * Renders nested objects as labeled rows, arrays as chip rows, and
  * primitives as monospace values. Compact and theme-aware.
  */
+import { useT } from '../i18n/LocaleContext'
+
 export function EvidenceTable({ data, depth = 0 }: { data: Record<string, unknown>; depth?: number }) {
   const entries = Object.entries(data)
+  const t = useT()
   if (!entries.length) {
-    return <p className="text-xs text-fg-subtle">No evidence recorded.</p>
+    return <p className="text-xs text-fg-subtle">{t('evidence.no_evidence')}</p>
   }
   return (
     <div className="space-y-1.5">

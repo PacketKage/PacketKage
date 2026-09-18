@@ -1,19 +1,21 @@
 import { useEffect, useRef } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from './ui'
+import { useT } from '../i18n/LocaleContext'
 
 /** Error message + retry button for a failed query. */
 export function ErrorState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
+  const t = useT()
   return (
     <div
       className="flex items-center justify-center gap-3 rounded-xl border border-danger/30 bg-danger/5 p-12 text-center text-sm text-danger"
       role="alert"
     >
       <AlertTriangle size={16} aria-hidden />
-      {message ?? 'Something went wrong while loading data.'}
+      {message ?? t('states.error_generic')}
       {onRetry && (
         <Button size="sm" variant="secondary" onClick={onRetry}>
-          Retry
+          {t('common.retry')}
         </Button>
       )}
     </div>
@@ -46,6 +48,7 @@ export function Pagination({
   const canPrev = offset > 0
   const canNext = offset + limit < total
   const topRef = useRef<HTMLDivElement>(null)
+  const t = useT()
 
   useEffect(() => {
     // follow page changes into view (tables live above the controls)
@@ -58,7 +61,7 @@ export function Pagination({
       className="flex items-center justify-between border-t border-border px-4 py-2.5 text-xs text-fg-muted"
     >
       <span className="tabular-nums">
-        {total.toLocaleString()} records · page {page} of {pageCount}
+        {t('pagination.records', { count: total.toLocaleString(), page, total: pageCount })}
       </span>
       <div className="flex gap-2">
         <Button
@@ -67,10 +70,10 @@ export function Pagination({
           disabled={!canPrev}
           onClick={() => onPageChange(Math.max(0, offset - limit))}
         >
-          <ArrowLeft size={14} aria-hidden /> Prev
+          <ArrowLeft size={14} aria-hidden /> {t('pagination.prev')}
         </Button>
         <Button size="sm" variant="ghost" disabled={!canNext} onClick={() => onPageChange(offset + limit)}>
-          Next <ArrowRight size={14} aria-hidden />
+          {t('pagination.next')} <ArrowRight size={14} aria-hidden />
         </Button>
       </div>
     </div>

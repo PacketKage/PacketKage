@@ -117,7 +117,7 @@ describe('RequireAdmin', () => {
     )
     expect(screen.queryByText('admin area')).toBeNull()
     expect(screen.getByText('Access denied')).toBeDefined()
-    expect(screen.getByText('packetkage-admin')).toBeDefined()
+    expect(screen.getByText(/packetkage-admin/)).toBeDefined()
   })
 
   it('falls back to the sign-in screen for anonymous users', () => {

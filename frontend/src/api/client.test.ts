@@ -75,6 +75,16 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** Convert the init Headers (if any) into a plain record for assertions. */
+function headersOf(init?: RequestInit): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!init?.headers) return out
+  new Headers(init.headers).forEach((v, k) => {
+    out[k] = v
+  })
+  return out
+}
+
 describe('api.streamJob', () => {
   it('subscribes to /api/jobs/{id}/events and forwards JSON snapshots', () => {
     const restore = installEventSource()
@@ -136,7 +146,7 @@ describe('api.streamJob', () => {
 describe('api auth endpoints', () => {
   it('authStatus hits the public /api/auth/status endpoint', async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(JSON.stringify({ configured: true, admin_group: 'a', analyst_group: 'b' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -145,7 +155,8 @@ describe('api auth endpoints', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const status = await api.authStatus()
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/status', undefined)
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/status', expect.any(Object))
+    expect(headersOf(fetchMock.mock.calls.at(-1)?.[1])['accept-language']).toBe('en')
     expect(status.configured).toBe(true)
     vi.unstubAllGlobals()
   })
@@ -227,60 +238,66 @@ describe('api setup endpoints', () => {
     })
 
   it('setupStatus hits the public /api/setup/status endpoint', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ configured: false, requires_token: true }))
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ configured: false, requires_token: true }),
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const status = await api.setupStatus()
-    expect(fetchMock).toHaveBeenCalledWith('/api/setup/status', undefined)
+    expect(fetchMock).toHaveBeenCalledWith('/api/setup/status', expect.any(Object))
+    expect(headersOf(fetchMock.mock.calls.at(-1)?.[1])['accept-language']).toBe('en')
     expect(status.requires_token).toBe(true)
     vi.unstubAllGlobals()
   })
 
   it('setupConfig sends the bootstrap token as X-Setup-Token when provided', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse({ configured: false, values: {}, locked: [], client_secret_set: false, persisted: false }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
     await api.setupConfig('tok-123')
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/setup/config',
-      expect.objectContaining({ headers: { 'X-Setup-Token': 'tok-123' } }),
-    )
+    const init = fetchMock.mock.calls.at(-1)?.[1]
+    expect(fetchMock).toHaveBeenCalledWith('/api/setup/config', expect.any(Object))
+    expect(headersOf(init)?.['x-setup-token']).toBe('tok-123')
+    expect(headersOf(init)?.['accept-language']).toBe('en')
     vi.unstubAllGlobals()
   })
 
   it('testSetup POSTs JSON and omits the token header when absent', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ ok: true }),
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     await api.testSetup({ oidc_issuer: 'https://idp.example' })
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/setup/test',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oidc_issuer: 'https://idp.example' }),
-      }),
-    )
+    const init = fetchMock.mock.calls.at(-1)?.[1]
+    expect(fetchMock).toHaveBeenCalledWith('/api/setup/test', expect.any(Object))
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(JSON.stringify({ oidc_issuer: 'https://idp.example' }))
+    const headers = headersOf(init)
+    expect(headers['content-type']).toBe('application/json')
+    expect(headers['accept-language']).toBe('en')
+    expect(headers['x-setup-token']).toBeUndefined()
     vi.unstubAllGlobals()
   })
 
   it('saveSetup POSTs to /api/setup/oidc with the token header', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse({ configured: true, applied: ['oidc_issuer'], redirect_uri: 'https://x/api/auth/callback' }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await api.saveSetup({ oidc_issuer: 'https://idp.example' }, 'tok-9')
     expect(result.configured).toBe(true)
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/setup/oidc',
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Setup-Token': 'tok-9' },
-      }),
-    )
+    const init = fetchMock.mock.calls.at(-1)?.[1]
+    expect(fetchMock).toHaveBeenCalledWith('/api/setup/oidc', expect.any(Object))
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(JSON.stringify({ oidc_issuer: 'https://idp.example' }))
+    const headers = headersOf(init)
+    expect(headers['content-type']).toBe('application/json')
+    expect(headers['x-setup-token']).toBe('tok-9')
+    expect(headers['accept-language']).toBe('en')
     vi.unstubAllGlobals()
   })
 })

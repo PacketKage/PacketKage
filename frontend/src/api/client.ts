@@ -1,3 +1,4 @@
+import { currentLocale } from '../i18n/locale'
 import type {
   Alert,
   AuthStatus,
@@ -40,7 +41,9 @@ function setupHeaders(token?: string): Record<string, string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, init)
+  const headers = new Headers(init?.headers)
+  headers.set('Accept-Language', currentLocale())
+  const resp = await fetch(`${BASE}${path}`, { ...init, headers })
   if (!resp.ok) {
     let detail = resp.statusText
     try {
@@ -253,7 +256,10 @@ export const api = {
   },
 
   // Report download URL (opens in a new tab; printable to PDF)
-  captureReportUrl: (captureId: string) => `${BASE}/captures/${captureId}/report`,
+  captureReportUrl: (captureId: string) => {
+    const locale = currentLocale()
+    return `${BASE}/captures/${captureId}/report${locale === 'fr' ? '?lang=fr' : ''}`
+  },
 
   // Timeline + Graph + Replay (Step 5)
   getTimeline: (

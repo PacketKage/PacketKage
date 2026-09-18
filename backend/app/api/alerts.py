@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.api.common import capture_or_404
 from app.core.database import get_db
+from app.i18n import get_locale
+from app.i18n.localize import localize_alert
 from app.repositories import AlertRepository
 from app.schemas.api import AlertOut, Page
 
@@ -22,6 +24,7 @@ def list_alerts(
     rule: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    locale: str = Depends(get_locale),
     db: Session = Depends(get_db),
 ):
     capture_or_404(db, capture_id)
@@ -34,7 +37,7 @@ def list_alerts(
         rule=rule,
     )
     return Page.of(
-        [AlertOut.model_validate(a) for a in alerts],
+        [localize_alert(a, locale) for a in alerts],
         total=total,
         offset=offset,
         limit=limit,
@@ -42,11 +45,11 @@ def list_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertOut)
-def get_alert(alert_id: str, db: Session = Depends(get_db)):
+def get_alert(alert_id: str, locale: str = Depends(get_locale), db: Session = Depends(get_db)):
     alert = AlertRepository(db).get(alert_id)
     if alert is None:
         raise HTTPException(404, "Alert not found")
-    return alert
+    return localize_alert(alert, locale)
 
 
 class AckBody(BaseModel):
@@ -54,11 +57,13 @@ class AckBody(BaseModel):
 
 
 @router.post("/{alert_id}/ack", response_model=AlertOut)
-def acknowledge_alert(alert_id: str, body: AckBody, db: Session = Depends(get_db)):
+def acknowledge_alert(
+    alert_id: str, body: AckBody, locale: str = Depends(get_locale), db: Session = Depends(get_db)
+):
     alert = AlertRepository(db).set_acknowledged(alert_id, body.acknowledged)
     if alert is None:
         raise HTTPException(404, "Alert not found")
-    return alert
+    return localize_alert(alert, locale)
 
 
 class TriageBody(BaseModel):
@@ -73,7 +78,9 @@ ALLOWED_TAGS = {"confirmed", "false-positive", "escalated"}
 
 
 @router.patch("/{alert_id}", response_model=AlertOut)
-def update_alert(alert_id: str, body: TriageBody, db: Session = Depends(get_db)):
+def update_alert(
+    alert_id: str, body: TriageBody, locale: str = Depends(get_locale), db: Session = Depends(get_db)
+):
     """Triage update: acknowledge, tag (confirmed/false-positive/escalated), or note."""
     repo = AlertRepository(db)
     alert = repo.get(alert_id)
@@ -93,4 +100,4 @@ def update_alert(alert_id: str, body: TriageBody, db: Session = Depends(get_db))
 
     if fields:
         alert = repo.update(alert, **fields)
-    return alert
+    return localize_alert(alert, locale)

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth import sessions
 from app.auth.dependencies import AuthUser, get_current_user
 from app.auth.oidc import OIDCClient, OIDCError
+from app.auth.rate_limit import rate_limit_callback, rate_limit_login
 from app.core import config
 from app.core.database import get_db
 
@@ -78,6 +79,7 @@ def auth_status() -> dict:
 async def login(
     request: Request,
     next: str = Query(default="/"),
+    _rl: None = Depends(rate_limit_login),
 ) -> RedirectResponse:
     s = config.settings
     if not s.auth_enabled:
@@ -121,6 +123,7 @@ async def callback(
     state: str = Query(default=""),
     error: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    _rl: None = Depends(rate_limit_callback),
 ) -> RedirectResponse:
     s = config.settings
     if error:

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { mutateError, mutateSuccess } from '../components/toasts'
 import { downloadCsv, toCsv, type CsvCell } from '../utils/csv'
 import type { Page } from '../types/api'
+import { translate } from '../i18n/locale'
 
 /** Backend caps: paged endpoints accept limit ≤ 500; hosts endpoint ≤ 1000. */
 const PAGE_LIMIT = 500
@@ -27,9 +28,9 @@ export async function fetchAllPages<T>(
 }
 
 export interface CsvExportOptions<T> {
-  /** Toast/filename label, e.g. 'alerts'. */
+  /** Filename slug + toast id, e.g. 'alerts'. */
   label: string
-  /** Human-readable column headers, in order. */
+  /** Human-readable column headers, in order (already localized). */
   headers: string[]
   /** Map a row to CSV cells, in header order. */
   toRow: (row: T) => CsvCell[]
@@ -52,14 +53,13 @@ export function useCsvExport<T>(opts: CsvExportOptions<T>) {
     try {
       const rows = await opts.fetchAll()
       if (rows.length === 0) {
-        toast.info('Nothing to export — no rows match the current filters', { id: `export-${opts.label}` })
+        toast.info(translate('csvexport.nothing'), { id: `export-${opts.label}` })
         return
       }
       downloadCsv(`${opts.label}-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(opts.headers, rows.map(opts.toRow)))
-      const noun = `${rows.length.toLocaleString()} ${opts.label}`
-      mutateSuccess(`Exported ${rows.length === 1 ? noun.replace(/s$/, '') : noun}`, `export-${opts.label}`)
+      mutateSuccess(translate('csvexport.exported', { count: rows.length }), `export-${opts.label}`)
     } catch (err) {
-      mutateError('Export', err, `export-${opts.label}`)
+      mutateError(translate('csvexport.action'), err, `export-${opts.label}`)
     } finally {
       setIsExporting(false)
     }

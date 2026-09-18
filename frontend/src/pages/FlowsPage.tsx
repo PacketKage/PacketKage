@@ -16,6 +16,8 @@ import { EmptyState, ErrorState, Pagination } from '../components/states'
 import { SkeletonTable, formatBytes, formatTime } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { fetchAllPages, useCsvExport } from '../hooks/useCsvExport'
+import { translate } from '../i18n/locale'
+import { useT } from '../i18n/LocaleContext'
 import { csvTime } from '../utils/csv'
 import type { Flow, PacketEvidence } from '../types/api'
 
@@ -26,17 +28,18 @@ const BADGE: Record<string, string> = {
   reset: 'bg-danger/10 text-danger ring-danger/30',
 }
 
-const DIR_LABEL: Record<string, string> = {
-  outbound: '→ out',
-  inbound: '← in',
-  internal: '↔ int',
-  unknown: '?',
+const DIR_KEY: Record<string, string> = {
+  outbound: 'flows.direction.outbound',
+  inbound: 'flows.direction.inbound',
+  internal: 'flows.direction.internal',
+  unknown: 'flows.direction.unknown',
 }
 
 const PAGE_SIZE = 50
 
 export function FlowsPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [transport, setTransport] = useState('')
   const [direction, setDirection] = useState('')
   const [offset, setOffset] = useState(0)
@@ -78,11 +81,13 @@ export function FlowsPage() {
 
   // CSV export of every flow matching the current filters (paged at the cap)
   const flowExport = useCsvExport<Flow>({
-    label: 'flows',
+    label: translate('flows.csv.label'),
     headers: [
-      'First Seen', 'Source IP', 'Source Port', 'Destination IP', 'Destination Port',
-      'Protocol', 'App Protocol', 'Direction', 'State', 'Packets', 'Bytes',
-      'Retransmissions', 'Resets', 'Duration (s)',
+      translate('flows.csv.first_seen'), translate('flows.csv.source_ip'), translate('flows.csv.source_port'),
+      translate('flows.csv.destination_ip'), translate('flows.csv.destination_port'),
+      translate('flows.csv.protocol'), translate('flows.csv.app_protocol'), translate('flows.csv.direction'),
+      translate('flows.csv.state'), translate('flows.csv.packets'), translate('flows.csv.bytes'),
+      translate('flows.csv.retransmissions'), translate('flows.csv.resets'), translate('flows.csv.duration'),
     ],
     toRow: (f) => [
       csvTime(f.first_seen), f.source_ip, f.source_port, f.destination_ip, f.destination_port,
@@ -106,28 +111,26 @@ export function FlowsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Flows</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        Reconstructed conversations — start from the flow, drill into the packet evidence.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('flows.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('flows.subtitle')}</p>
 
       {/* Capture picker + filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={(id) => { setCaptureId(id); setOffset(0) }} />
-        {['', 'TCP', 'UDP'].map((t) => (
+        {['', 'TCP', 'UDP'].map((tt) => (
           <button
-            key={t}
-            onClick={() => { setTransport(t); setOffset(0) }}
+            key={tt}
+            onClick={() => { setTransport(tt); setOffset(0) }}
             className={`rounded-lg px-3 py-1.5 ring-1 transition ${
-              transport === t
+              transport === tt
                 ? 'bg-info/10 text-info ring-info/30'
                 : 'text-fg-muted ring-border-strong hover:text-fg'
             }`}
           >
-            {t || 'All'}
+            {tt || t('common.all')}
           </button>
         ))}
-        <span className="ml-2 text-xs text-fg-subtle">direction:</span>
+        <span className="ml-2 text-xs text-fg-subtle">{t('flows.direction')}</span>
         {['', 'outbound', 'inbound', 'internal'].map((d) => (
           <button
             key={d}
@@ -138,51 +141,56 @@ export function FlowsPage() {
                 : 'text-fg-muted ring-border-strong hover:text-fg'
             }`}
           >
-            {d || 'any'}
+            {d ? t(`flows.filter.${d}`) : t('common.any')}
           </button>
         ))}
-        <span className="ml-2 text-xs text-fg-subtle">sort:</span>
+        <span className="ml-2 text-xs text-fg-subtle">{t('flows.sort')}</span>
         <select
-          aria-label="Sort by"
+          aria-label={t('flows.sort.by')}
           value={sort}
           onChange={(e) => { setSort(e.target.value); setOffset(0) }}
           className="rounded-lg border border-border-strong bg-surface-2/50 px-2 py-1.5 text-xs text-fg-muted"
         >
-          <option value="first_seen">first seen</option>
-          <option value="bytes">bytes</option>
-          <option value="packets">packets</option>
-          <option value="duration">duration</option>
+          <option value="first_seen">{t('flows.sort.first_seen')}</option>
+          <option value="bytes">{t('flows.sort.bytes')}</option>
+          <option value="packets">{t('flows.sort.packets')}</option>
+          <option value="duration">{t('flows.sort.duration')}</option>
         </select>
         <button
           onClick={() => { setOrder(order === 'asc' ? 'desc' : 'asc'); setOffset(0) }}
           className="rounded-lg px-2.5 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
         >
-          {order === 'asc' ? (<><ArrowUp size={12} className="inline" aria-hidden /> asc</>) : (<><ArrowDown size={12} className="inline" aria-hidden /> desc</>)}
+          {order === 'asc' ? (<><ArrowUp size={12} className="inline" aria-hidden /> {t('flows.order.asc')}</>) : (<><ArrowDown size={12} className="inline" aria-hidden /> {t('flows.order.desc')}</>)}
         </button>
         <button
           onClick={flowExport.export}
           disabled={flowExport.isExporting || !effectiveCaptureId || isLoading}
-          aria-label="Export flows to CSV"
-          title="Export filtered flows to CSV"
+          aria-label={t('flows.export_aria')}
+          title={t('flows.export_title')}
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:pointer-events-none disabled:opacity-50"
         >
           <Download size={12} aria-hidden />
-          {flowExport.isExporting ? 'Exporting…' : 'CSV'}
+          {flowExport.isExporting ? t('common.exporting') : 'CSV'}
         </button>
       </div>
 
       {!analyzed.length ? (
-        <EmptyState>No analyzed captures yet — upload and analyze a PCAP first.</EmptyState>
+        <EmptyState>{t('flows.empty.no_analyzed')}</EmptyState>
       ) : isLoading ? (
         <SkeletonTable
-          headers={['First Seen', 'Source', 'Dir', 'Destination', 'Proto', 'State', 'Packets', 'Bytes', 'Retrans', 'Resets', '']}
+          headers={[
+            t('flows.table.first_seen'), t('flows.table.source'), t('flows.table.dir'),
+            t('flows.table.destination'), t('flows.table.proto'), t('flows.table.state'),
+            t('flows.table.packets'), t('flows.table.bytes'), t('flows.table.retrans'),
+            t('flows.table.resets'), '',
+          ]}
           widths={['w-20', 'w-36', 'w-12', 'w-36', 'w-16', 'w-20', 'w-16', 'w-16', 'w-14', 'w-12', 'w-16']}
           rows={8}
         />
       ) : isError ? (
         <ErrorState message={String(error)} onRetry={() => refetch()} />
       ) : !flows.length ? (
-        <EmptyState>No flows match the current filters.</EmptyState>
+        <EmptyState>{t('flows.empty.no_filtered')}</EmptyState>
       ) : (
         <FlowsTable
           flows={flows}
@@ -218,15 +226,16 @@ function FlowsTable({
   onSelect: (id: string) => void
   footer?: React.ReactNode
 }) {
+  const t = useT()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack column defs are heterogeneously typed
   const columns: ColumnDef<Flow, any>[] = useMemo(
     () => [
       col.accessor('first_seen', {
-        header: 'First Seen',
+        header: t('flows.table.first_seen'),
         cell: (c) => <span className="font-mono text-xs text-fg-muted">{formatTime(c.getValue())}</span>,
       }),
       col.accessor('source_ip', {
-        header: 'Source',
+        header: t('flows.table.source'),
         cell: (c) => (
           <span className="font-mono text-fg-muted">
             {c.getValue()}
@@ -235,13 +244,13 @@ function FlowsTable({
         ),
       }),
       col.accessor('direction', {
-        header: 'Dir',
+        header: t('flows.table.dir'),
         cell: (c) => (
-          <span className="text-xs text-fg-subtle">{DIR_LABEL[c.getValue()] ?? '?'}</span>
+          <span className="text-xs text-fg-subtle">{translate(DIR_KEY[c.getValue()] ?? DIR_KEY.unknown)}</span>
         ),
       }),
       col.accessor('destination_ip', {
-        header: 'Destination',
+        header: t('flows.table.destination'),
         cell: (c) => (
           <span className="font-mono text-fg-muted">
             {c.getValue()}
@@ -250,7 +259,7 @@ function FlowsTable({
         ),
       }),
       col.accessor('transport_protocol', {
-        header: 'Proto',
+        header: t('flows.table.proto'),
         cell: (c) => {
           const t = c.getValue()
           const app = c.row.original.application_protocol
@@ -271,7 +280,7 @@ function FlowsTable({
         },
       }),
       col.accessor('tcp_state', {
-        header: 'State',
+        header: t('flows.table.state'),
         cell: (c) => {
           const s = c.getValue()
           if (!s) return <span className="text-xs text-fg-subtle">—</span>
@@ -283,15 +292,15 @@ function FlowsTable({
         },
       }),
       col.accessor('packets', {
-        header: 'Packets',
+        header: t('flows.table.packets'),
         cell: (c) => <span className="font-mono text-fg-muted tabular-nums">{c.getValue().toLocaleString()}</span>,
       }),
       col.accessor('bytes', {
-        header: 'Bytes',
+        header: t('flows.table.bytes'),
         cell: (c) => <span className="font-mono text-fg-muted tabular-nums">{formatBytes(c.getValue())}</span>,
       }),
       col.accessor('retransmissions', {
-        header: 'Retrans',
+        header: t('flows.table.retrans'),
         cell: (c) =>
           c.getValue() > 0 ? (
             <span className="font-mono text-warning tabular-nums">{c.getValue()}</span>
@@ -300,7 +309,7 @@ function FlowsTable({
           ),
       }),
       col.accessor('resets', {
-        header: 'Resets',
+        header: t('flows.table.resets'),
         cell: (c) =>
           c.getValue() > 0 ? (
             <span className="font-mono text-danger tabular-nums">{c.getValue()}</span>
@@ -316,12 +325,12 @@ function FlowsTable({
             onClick={() => onSelect(c.row.original.id)}
             className="rounded px-2 py-1 text-xs text-info ring-1 ring-info/30 hover:bg-info/10"
           >
-            packets →
+            {t('flows.table.packet_evidence')}
           </button>
         ),
       }),
     ],
-    [onSelect],
+    [onSelect, t],
   )
 
   const table = useReactTable<Flow>({
@@ -369,6 +378,7 @@ function FlowsTable({
 
 function FlowEvidenceModal({ flowId, onClose }: { flowId: string; onClose: () => void }) {
   const queryClient = useQueryClient()
+  const t = useT()
   const { data: flow, isLoading, isError } = useQuery({
     queryKey: ['flow', flowId],
     queryFn: () => api.getFlow(flowId),
@@ -388,18 +398,18 @@ function FlowEvidenceModal({ flowId, onClose }: { flowId: string; onClose: () =>
             </span>
           </>
         ) : (
-          'Loading flow…'
+          t('flows.modal.loading')
         )
       }
       subtitle={
         flow && (
           <>
             {flow.transport_protocol} · {flow.application_protocol ?? '—'} ·{' '}
-            {flow.packets} packets · {formatBytes(flow.bytes)}
+            {t('capture.detail.packets', { count: flow.packets })} · {formatBytes(flow.bytes)}
             {flow.retransmissions > 0 && (
-              <span className="text-warning"> · {flow.retransmissions} retransmissions</span>
+              <span className="text-warning">{t('flows.modal.retransmissions', { count: flow.retransmissions })}</span>
             )}
-            {flow.resets > 0 && <span className="text-danger"> · {flow.resets} resets</span>}
+            {flow.resets > 0 && <span className="text-danger">{t('flows.modal.resets', { count: flow.resets })}</span>}
           </>
         )
       }
@@ -408,7 +418,7 @@ function FlowEvidenceModal({ flowId, onClose }: { flowId: string; onClose: () =>
     >
       {isError ? (
         <div className="p-12 text-center text-sm text-danger">
-          Failed to load packet evidence.
+          {t('flows.modal.error')}
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['flow', flowId] })}
             className="ml-3 rounded-lg bg-surface-3 px-3 py-1 text-xs text-fg-muted ring-1 ring-border-strong hover:text-fg"
@@ -419,7 +429,10 @@ function FlowEvidenceModal({ flowId, onClose }: { flowId: string; onClose: () =>
       ) : isLoading || !flow ? (
         <div className="p-4">
           <SkeletonTable
-            headers={['Time', 'Source', 'Destination', 'Proto', 'Flags', 'Len', 'Info']}
+            headers={[
+              t('flows.evidence.time'), t('flows.evidence.source'), t('flows.evidence.destination'),
+              t('flows.evidence.proto'), t('flows.evidence.flags'), t('flows.evidence.len'), t('flows.evidence.info'),
+            ]}
             widths={['w-20', 'w-32', 'w-32', 'w-14', 'w-20', 'w-12', 'w-40']}
             rows={6}
             className="border-0"
@@ -429,13 +442,13 @@ function FlowEvidenceModal({ flowId, onClose }: { flowId: string; onClose: () =>
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-surface-2/50">
             <tr className="text-left text-xs uppercase tracking-wider text-fg-subtle">
-              <th className="px-4 py-2.5">Time</th>
-              <th className="px-4 py-2.5">Source</th>
-              <th className="px-4 py-2.5">Destination</th>
-              <th className="px-4 py-2.5">Proto</th>
-              <th className="px-4 py-2.5">Flags</th>
-              <th className="px-4 py-2.5">Len</th>
-              <th className="px-4 py-2.5">Info</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.time')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.source')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.destination')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.proto')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.flags')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.len')}</th>
+              <th className="px-4 py-2.5">{t('flows.evidence.info')}</th>
             </tr>
           </thead>
           <tbody>

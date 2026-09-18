@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext'
 import { Logo } from '../components/Logo'
 import { Button, Spinner } from '../components/ui'
 import { SetupPage } from '../pages/SetupPage'
+import { useT } from '../i18n/LocaleContext'
 
 /**
  * Route guards wired in main.tsx.
@@ -28,6 +29,7 @@ function SignInScreen({ reason }: { reason: string }) {
   const { configured, signIn } = useAuth()
   const { pathname, search } = useLocation()
   const next = pathname + search
+  const t = useT()
   return (
     <div className="flex min-h-[70vh] items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border border-border bg-surface-2/50 p-8">
@@ -39,8 +41,7 @@ function SignInScreen({ reason }: { reason: string }) {
           {configured ? (
             <>
               <p className="mt-4 text-sm leading-relaxed text-fg-subtle">
-                Sign in with your organization account to capture, analyze, and
-                investigate network traffic.
+                {t('auth.sign_in.title')}
               </p>
               <Button
                 variant="primary"
@@ -49,21 +50,19 @@ function SignInScreen({ reason }: { reason: string }) {
                 onClick={() => signIn(next || '/')}
               >
                 <KeyRound size={16} aria-hidden />
-                Sign in
+                {t('auth.sign_in')}
               </Button>
-              <p className="mt-4 text-xs text-fg-subtle">
-                You'll be redirected to your identity provider to authenticate.
-              </p>
+              <p className="mt-4 text-xs text-fg-subtle">{t('auth.sign_in_redirect')}</p>
             </>
           ) : (
             <div className="mt-6 w-full rounded-lg border border-warning/30 bg-warning/5 p-4 text-left">
-              <p className="text-sm font-medium text-fg">Authentication is not configured</p>
+              <p className="text-sm font-medium text-fg">{t('auth.not_configured')}</p>
               <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-                The backend refuses to run without OIDC (Authorization-Code + PKCE).
-                Set <code className="text-fg-subtle">PACKETKAGE_OIDC_ISSUER</code>,{' '}
-                <code className="text-fg-subtle">PACKETKAGE_OIDC_CLIENT_ID</code>,{' '}
-                <code className="text-fg-subtle">PACKETKAGE_OIDC_CLIENT_SECRET</code> to connect
-                Authentik, then restart the backend.
+                {t('auth.not_configured_detail', {
+                  issuer: 'PACKETKAGE_OIDC_ISSUER',
+                  client_id: 'PACKETKAGE_OIDC_CLIENT_ID',
+                  client_secret: 'PACKETKAGE_OIDC_CLIENT_SECRET',
+                })}
               </p>
             </div>
           )}
@@ -75,34 +74,34 @@ function SignInScreen({ reason }: { reason: string }) {
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { loading, user, configured } = useAuth()
+  const t = useT()
   if (loading) return <FullScreenSpinner />
   if (user) return <>{children}</>
   // No OIDC provider yet → run the first-run wizard instead of a dead sign-in.
   if (!configured) return <SetupPage />
-  return <SignInScreen reason="You need to sign in to continue." />
+  return <SignInScreen reason={t('auth.require_sign_in')} />
 }
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { loading, user, isAdmin, configured } = useAuth()
+  const t = useT()
   if (loading) return <FullScreenSpinner />
   if (!configured) return <SetupPage />
-  if (!user) return <SignInScreen reason="You need to sign in to continue." />
+  if (!user) return <SignInScreen reason={t('auth.require_sign_in')} />
   if (isAdmin) return <>{children}</>
   return (
     <div className="flex min-h-[70vh] items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border border-danger/30 bg-danger/5 p-8 text-center">
         <ShieldAlert size={28} className="mx-auto text-danger" aria-hidden />
-        <h1 className="mt-3 text-lg font-semibold text-fg">Access denied</h1>
+        <h1 className="mt-3 text-lg font-semibold text-fg">{t('auth.access_denied')}</h1>
         <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-          Your account is signed in as <span className="font-medium text-fg">analyst</span>, but
-          this area requires the <code className="text-fg-subtle">packetkage-admin</code>{' '}
-          group. Ask an administrator to grant it.
+          {t('auth.access_denied_detail', { role: 'analyst', group: 'packetkage-admin' })}
         </p>
         <Link
           to="/"
           className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
         >
-          Return to dashboard
+          {t('auth.return_dashboard')}
         </Link>
       </div>
     </div>

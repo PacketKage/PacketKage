@@ -44,6 +44,12 @@ class RuleResult:
     related_flow_ids: list[str] = field(default_factory=list)
     related_packet_refs: list[int] = field(default_factory=list)
     explanation: str = ""
+    # i18n: message keys + interpolation params. English strings above remain the
+    # persisted fallback; keys/params let the API render fr at read time.
+    title_key: str | None = None
+    title_params: dict = field(default_factory=dict)
+    explanation_key: str | None = None
+    explanation_params: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -59,11 +65,22 @@ class RuleResult:
             "related_flow_ids": self.related_flow_ids,
             "related_packet_refs": self.related_packet_refs,
             "explanation": self.explanation,
+            "title_key": self.title_key or f"alert.{self.rule_name}.title",
+            "title_params": self.title_params,
+            "explanation_key": self.explanation_key or f"alert.{self.rule_name}.explanation",
+            "explanation_params": self.explanation_params,
         }
 
 
-def _reason(reason: str, detail: str, weight: int) -> dict:
-    return {"reason": reason, "detail": detail, "weight": weight}
+def _reason(key: str, reason: str, detail: str, weight: int, **params) -> dict:
+    return {
+        "reason": reason,
+        "detail": detail,
+        "weight": weight,
+        "reason_key": key,
+        "detail_key": f"{key}.detail",
+        "params": params,
+    }
 
 
 def _clamp(score: int) -> int:
@@ -107,12 +124,39 @@ def rule_port_scan(flows: list[dict]) -> list[RuleResult]:
         rate = n_ports / duration
         score = _clamp(35 + min(n_ports, 100) * 0.4 + min(rate, 50) * 0.5)
         reasons = [
-            _reason("Distinct ports probed", f"{n_ports} unique ports on {dst}", 30),
-            _reason("Failed connections", f"{len(s['flows'])} unanswered SYN attempts", 20),
-            _reason("Scan rate", f"{rate:.0f} ports/second", 20),
+            _reason(
+                "alert.port_scan.reason.distinct_ports",
+                "Distinct ports probed",
+                f"{n_ports} unique ports on {dst}",
+                30,
+                n_ports=n_ports,
+                dst=dst,
+            ),
+            _reason(
+                "alert.port_scan.reason.failed_connections",
+                "Failed connections",
+                f"{len(s['flows'])} unanswered SYN attempts",
+                20,
+                flow_count=len(s["flows"]),
+            ),
+            _reason(
+                "alert.port_scan.reason.scan_rate",
+                "Scan rate",
+                f"{rate:.0f} ports/second",
+                20,
+                rate=f"{rate:.0f}",
+            ),
         ]
         if dst and is_private_ip(dst):
-            reasons.append(_reason("Internal target", f"target {dst} is an internal host", 10))
+            reasons.append(
+                _reason(
+                    "alert.port_scan.reason.internal_target",
+                    "Internal target",
+                    f"target {dst} is an internal host",
+                    10,
+                    dst=dst,
+                )
+            )
         results.append(
             RuleResult(
                 rule_name="port_scan",
@@ -133,6 +177,13 @@ def rule_port_scan(flows: list[dict]) -> list[RuleResult]:
                     f"Host {src} attempted connections to {n_ports} distinct ports on {dst} "
                     f"within {duration:.1f}s with no responses — consistent with a SYN port scan."
                 ),
+                title_params={"src": src, "dst": dst, "n_ports": n_ports},
+                explanation_params={
+                    "src": src,
+                    "n_ports": n_ports,
+                    "dst": dst,
+                    "duration": f"{duration:.1f}",
+                },
             )
         )
     return results
@@ -162,15 +213,45 @@ def rule_beaconing(flows: list[dict]) -> list[RuleResult]:
             continue
 
         reasons = [
-            _reason("Periodic connection pattern", f"{len(times)} connections at ~{mean:.1f}s intervals", 40),
-            _reason("Low jitter", f"interval std-dev {std:.2f}s (machine-like regularity)", 25),
-            _reason("Repeated destination", f"{dst}:{dport} contacted {len(group)} times", 20),
+            _reason(
+                "alert.beaconing.reason.periodic_pattern",
+                "Periodic connection pattern",
+                f"{len(times)} connections at ~{mean:.1f}s intervals",
+                40,
+                conn_count=len(times),
+                mean=f"{mean:.1f}",
+            ),
+            _reason(
+                "alert.beaconing.reason.low_jitter",
+                "Low jitter",
+                f"interval std-dev {std:.2f}s (machine-like regularity)",
+                25,
+                std=f"{std:.2f}",
+            ),
+            _reason(
+                "alert.beaconing.reason.repeated_destination",
+                "Repeated destination",
+                f"{dst}:{dport} contacted {len(group)} times",
+                20,
+                dst=dst,
+                dport=dport,
+                count=len(group),
+            ),
         ]
         score = _clamp(60 + min(len(group), 40) * 0.5 + 10)  # periodicity alone is strong
 
         suspicious_port = SUSPICIOUS_PORTS.get(dport)
         if suspicious_port:
-            reasons.append(_reason("Suspicious port", f"port {dport} ({suspicious_port})", 10))
+            reasons.append(
+                _reason(
+                    "alert.beaconing.reason.suspicious_port",
+                    "Suspicious port",
+                    f"port {dport} ({suspicious_port})",
+                    10,
+                    dport=dport,
+                    association=suspicious_port,
+                )
+            )
             score = _clamp(score + 10)
 
         results.append(
@@ -196,6 +277,15 @@ def rule_beaconing(flows: list[dict]) -> list[RuleResult]:
                     f"~{mean:.0f}s intervals (jitter {std:.2f}s). Periodic beacons like this are a "
                     f"hallmark of C2 check-ins or scheduled implants."
                 ),
+                title_params={"src": src, "dst": dst, "dport": dport, "mean": f"{mean:.0f}"},
+                explanation_params={
+                    "src": src,
+                    "dst": dst,
+                    "dport": dport,
+                    "conn_count": len(times),
+                    "mean": f"{mean:.0f}",
+                    "std": f"{std:.2f}",
+                },
             )
         )
     return results
@@ -229,16 +319,37 @@ def rule_dns_tunneling(parsed: ParsedCapture, dns_txns: list[dict]) -> list[Rule
         reasons = []
         score = 0
         if d["max_label"] >= 30:
-            reasons.append(_reason("Long encoded labels", f"longest DNS label: {d['max_label']} chars", 35))
+            reasons.append(
+                _reason(
+                    "alert.dns_tunneling.reason.long_encoded_labels",
+                    "Long encoded labels",
+                    f"longest DNS label: {d['max_label']} chars",
+                    35,
+                    max_label=d["max_label"],
+                )
+            )
             score += 35
         if unique_sub >= 10:
             reasons.append(
-                _reason("High subdomain entropy", f"{unique_sub} unique subdomains under one parent", 30)
+                _reason(
+                    "alert.dns_tunneling.reason.high_subdomain_entropy",
+                    "High subdomain entropy",
+                    f"{unique_sub} unique subdomains under one parent",
+                    30,
+                    unique_sub=unique_sub,
+                )
             )
             score += 30
         if d["nxdomain"] >= 10:
             reasons.append(
-                _reason("High NXDOMAIN rate", f"{d['nxdomain']}/{n_queries} queries returned NXDOMAIN", 15)
+                _reason(
+                    "alert.dns_tunneling.reason.high_nxdomain_rate",
+                    "High NXDOMAIN rate",
+                    f"{d['nxdomain']}/{n_queries} queries returned NXDOMAIN",
+                    15,
+                    nx=d["nxdomain"],
+                    queries=n_queries,
+                )
             )
             score += 15
         if not reasons:
@@ -267,6 +378,13 @@ def rule_dns_tunneling(parsed: ParsedCapture, dns_txns: list[dict]) -> list[Rule
                     f"(longest {d['max_label']} chars) across {unique_sub} unique subdomains — "
                     f"a pattern consistent with DNS tunneling (data exfiltration over DNS)."
                 ),
+                title_params={"client": client},
+                explanation_params={
+                    "client": client,
+                    "queries": n_queries,
+                    "max_label": d["max_label"],
+                    "unique_sub": unique_sub,
+                },
             )
         )
     return results
@@ -293,8 +411,21 @@ def rule_nxdomain_burst(dns_txns: list[dict]) -> list[RuleResult]:
         if nx < 10:
             continue
         reasons = [
-            _reason("High NXDOMAIN volume", f"{nx} failed lookups out of {total}", 30),
-            _reason("NXDOMAIN rate", f"{rate * 100:.0f}% of queries fail", 20),
+            _reason(
+                "alert.nxdomain_burst.reason.high_nxdomain_volume",
+                "High NXDOMAIN volume",
+                f"{nx} failed lookups out of {total}",
+                30,
+                nx=nx,
+                total=total,
+            ),
+            _reason(
+                "alert.nxdomain_burst.reason.nxdomain_rate",
+                "NXDOMAIN rate",
+                f"{rate * 100:.0f}% of queries fail",
+                20,
+                rate=f"{rate * 100:.0f}",
+            ),
         ]
         score = _clamp(nx * 1.5 + rate * 20)
         results.append(
@@ -316,6 +447,12 @@ def rule_nxdomain_burst(dns_txns: list[dict]) -> list[RuleResult]:
                     f"traffic). Bursts of failed lookups can indicate DGA malware, typo-squat "
                     f"probing, or DNS reconnaissance."
                 ),
+                title_params={"client": client, "nx": nx},
+                explanation_params={
+                    "client": client,
+                    "nx": nx,
+                    "rate": f"{rate * 100:.0f}",
+                },
             )
         )
     return results
@@ -333,9 +470,26 @@ def rule_suspicious_port(flows: list[dict]) -> list[RuleResult]:
         if key in seen:
             continue
         seen.add(key)
-        reasons = [_reason("Known malware-associated port", f"port {port} ({SUSPICIOUS_PORTS[port]})", 40)]
+        reasons = [
+            _reason(
+                "alert.suspicious_port.reason.known_port",
+                "Known malware-associated port",
+                f"port {port} ({SUSPICIOUS_PORTS[port]})",
+                40,
+                port=port,
+                association=SUSPICIOUS_PORTS[port],
+            )
+        ]
         if is_private_ip(f["source_ip"]) and not is_private_ip(f["destination_ip"]):
-            reasons.append(_reason("Outbound to external host", f"{f['destination_ip']} is external", 15))
+            reasons.append(
+                _reason(
+                    "alert.suspicious_port.reason.outbound_external",
+                    "Outbound to external host",
+                    f"{f['destination_ip']} is external",
+                    15,
+                    dst=f["destination_ip"],
+                )
+            )
         score = _clamp(45 + (15 if len(reasons) > 1 else 0) + min(f["packets"], 20))
         results.append(
             RuleResult(
@@ -358,6 +512,17 @@ def rule_suspicious_port(flows: list[dict]) -> list[RuleResult]:
                     f"Host {f['source_ip']} communicated with {f['destination_ip']} on port {port}, "
                     f"commonly associated with {SUSPICIOUS_PORTS[port]}."
                 ),
+                title_params={
+                    "src": f["source_ip"],
+                    "dst": f["destination_ip"],
+                    "port": port,
+                },
+                explanation_params={
+                    "src": f["source_ip"],
+                    "dst": f["destination_ip"],
+                    "port": port,
+                    "association": SUSPICIOUS_PORTS[port],
+                },
             )
         )
     return results
@@ -389,9 +554,26 @@ def rule_excessive_failures(flows: list[dict]) -> list[RuleResult]:
                 severity=_severity_for(int(score)),
                 score=int(score),
                 reasons=[
-                    _reason("Repeated failures", f"{d['failed']} failed connections", 30),
-                    _reason("Limited port set", f"only {len(d['ports'])} ports involved", 10),
-                    _reason("No successful handshake", "no SYN-ACK observed", 15),
+                    _reason(
+                        "alert.excessive_connection_failures.reason.repeated_failures",
+                        "Repeated failures",
+                        f"{d['failed']} failed connections",
+                        30,
+                        failed=d["failed"],
+                    ),
+                    _reason(
+                        "alert.excessive_connection_failures.reason.limited_port_set",
+                        "Limited port set",
+                        f"only {len(d['ports'])} ports involved",
+                        10,
+                        port_count=len(d["ports"]),
+                    ),
+                    _reason(
+                        "alert.excessive_connection_failures.reason.no_handshake",
+                        "No successful handshake",
+                        "no SYN-ACK observed",
+                        15,
+                    ),
                 ],
                 evidence={"failed_count": d["failed"], "ports": sorted(d["ports"])},
                 source_ip=src,
@@ -402,6 +584,13 @@ def rule_excessive_failures(flows: list[dict]) -> list[RuleResult]:
                     f"{sorted(d['ports'])} without any completing — service outage, blocked "
                     f"firewall rule, or dead destination."
                 ),
+                title_params={"src": src, "dst": dst, "failed": d["failed"]},
+                explanation_params={
+                    "src": src,
+                    "failed": d["failed"],
+                    "dst": dst,
+                    "ports": sorted(d["ports"]),
+                },
             )
         )
     return results
@@ -430,11 +619,32 @@ def rule_connection_without_dns(flows: list[dict], dns_txns: list[dict]) -> list
     for (src, dst, dport), group in by_dest.items():
         total_bytes = sum(f["bytes"] for f in group)
         reasons = [
-            _reason("No DNS resolution observed", f"{dst} was never resolved by any DNS query", 35),
-            _reason("Direct IP connection", f"connection to {dst}:{dport} bypassing DNS", 25),
+            _reason(
+                "alert.connection_without_dns.reason.no_dns_resolution",
+                "No DNS resolution observed",
+                f"{dst} was never resolved by any DNS query",
+                35,
+                dst=dst,
+            ),
+            _reason(
+                "alert.connection_without_dns.reason.direct_ip_connection",
+                "Direct IP connection",
+                f"connection to {dst}:{dport} bypassing DNS",
+                25,
+                dst=dst,
+                dport=dport,
+            ),
         ]
         if total_bytes > 10_000:
-            reasons.append(_reason("Meaningful data volume", f"{total_bytes} bytes exchanged", 10))
+            reasons.append(
+                _reason(
+                    "alert.connection_without_dns.reason.meaningful_volume",
+                    "Meaningful data volume",
+                    f"{total_bytes} bytes exchanged",
+                    10,
+                    total_bytes=total_bytes,
+                )
+            )
         score = _clamp(50 + min(len(group), 20) + (10 if total_bytes > 10_000 else 0))
         results.append(
             RuleResult(
@@ -452,6 +662,8 @@ def rule_connection_without_dns(flows: list[dict], dns_txns: list[dict]) -> list
                     f"Host {src} connected to {dst}:{dport} without any DNS lookup resolving it "
                     f"in this capture. Hardcoded destinations are common in malware config."
                 ),
+                title_params={"src": src, "dst": dst, "dport": dport},
+                explanation_params={"src": src, "dst": dst, "dport": dport},
             )
         )
     return results
@@ -483,8 +695,20 @@ def rule_high_outbound_volume(flows: list[dict]) -> list[RuleResult]:
                 severity=_severity_for(55),
                 score=55,
                 reasons=[
-                    _reason("Dominant outbound traffic", f"{share * 100:.0f}% of all outbound bytes", 30),
-                    _reason("Large data volume", f"{bytes_} bytes sent externally", 20),
+                    _reason(
+                        "alert.high_outbound_volume.reason.dominant_traffic",
+                        "Dominant outbound traffic",
+                        f"{share * 100:.0f}% of all outbound bytes",
+                        30,
+                        share=f"{share * 100:.0f}",
+                    ),
+                    _reason(
+                        "alert.high_outbound_volume.reason.large_volume",
+                        "Large data volume",
+                        f"{bytes_} bytes sent externally",
+                        20,
+                        bytes=bytes_,
+                    ),
                 ],
                 evidence={
                     "bytes": bytes_,
@@ -496,6 +720,12 @@ def rule_high_outbound_volume(flows: list[dict]) -> list[RuleResult]:
                     f"Host {host} accounts for {share * 100:.0f}% of outbound traffic "
                     f"({bytes_} bytes) — possible data exfiltration or backup activity."
                 ),
+                title_params={"host": host, "bytes": bytes_},
+                explanation_params={
+                    "host": host,
+                    "share": f"{share * 100:.0f}",
+                    "bytes": bytes_,
+                },
             )
         )
     return results
@@ -566,16 +796,24 @@ def rule_arp_spoofing(parsed: ParsedCapture) -> list[RuleResult]:
             continue
         reasons = [
             _reason(
+                "alert.arp_spoofing.reason.multi_mac",
                 "IP claimed by multiple MACs",
                 f"{ip} announced by {len(macs)} MACs: {', '.join(sorted(macs))}",
                 45,
+                ip=ip,
+                mac_count=len(macs),
+                mac_list=", ".join(sorted(macs)),
             ),
         ]
         score = 70
         if gratuitous > 0:
             reasons.append(
                 _reason(
-                    "Gratuitous ARP announcements", f"{gratuitous} ARP packets announcing own mapping", 15
+                    "alert.arp_spoofing.reason.gratuitous",
+                    "Gratuitous ARP announcements",
+                    f"{gratuitous} ARP packets announcing own mapping",
+                    15,
+                    gratuitous=gratuitous,
                 )
             )
             score = _clamp(score + 10)
@@ -604,6 +842,8 @@ def rule_arp_spoofing(parsed: ParsedCapture) -> list[RuleResult]:
                     f"traffic — classic ARP-spoofing / man-in-the-middle signature (attacker "
                     f"poisons the gateway mapping)."
                 ),
+                title_params={"ip": ip, "mac_count": len(macs)},
+                explanation_params={"ip": ip, "mac_count": len(macs)},
             )
         )
     return results
@@ -632,18 +872,32 @@ def rule_lateral_movement(flows: list[dict]) -> list[RuleResult]:
         admin_ports = sorted({p for t in s["targets"].values() for p in t["ports"]})
         successful_targets = sum(1 for t in s["targets"].values() if t["successful"] > 0)
         reasons = [
-            _reason("Internal fan-out", f"{src} touched {n_targets} internal hosts", 35),
             _reason(
+                "alert.lateral_movement.reason.internal_fanout",
+                "Internal fan-out",
+                f"{src} touched {n_targets} internal hosts",
+                35,
+                src=src,
+                target_count=n_targets,
+            ),
+            _reason(
+                "alert.lateral_movement.reason.admin_ports",
                 "Admin/administrative ports",
                 f"ports {admin_ports} ({', '.join(LATERAL_MOVE_PORTS.get(p, str(p)) for p in admin_ports[:4])})",
                 30,
+                admin_ports=admin_ports,
+                names=", ".join(LATERAL_MOVE_PORTS.get(p, str(p)) for p in admin_ports[:4]),
             ),
         ]
         score = 40 + min(n_targets, 10) * 4
         if successful_targets >= 2:
             reasons.append(
                 _reason(
-                    "Successful connections", f"{successful_targets} targets answered — access achieved", 20
+                    "alert.lateral_movement.reason.successful_connections",
+                    "Successful connections",
+                    f"{successful_targets} targets answered — access achieved",
+                    20,
+                    successful=successful_targets,
                 )
             )
             score += 15
@@ -673,6 +927,12 @@ def rule_lateral_movement(flows: list[dict]) -> list[RuleResult]:
                     f"administrative ports {admin_ports}. This internal fan-out pattern is "
                     f"characteristic of post-compromise lateral movement."
                 ),
+                title_params={"src": src, "target_count": n_targets},
+                explanation_params={
+                    "src": src,
+                    "target_count": n_targets,
+                    "admin_ports": admin_ports,
+                },
             )
         )
     return results
@@ -732,19 +992,29 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
             continue
         reasons = [
             _reason(
+                "alert.dga_domain.reason.high_entropy",
                 "High-entropy domains",
                 f"{n_hi} domains with entropy well above baseline ({baseline:.2f})",
                 40,
+                count=n_hi,
+                baseline=f"{baseline:.2f}",
             ),
-            _reason("Dictionary-less labels", "long consonant runs, no readable words", 20),
+            _reason(
+                "alert.dga_domain.reason.dict_less",
+                "Dictionary-less labels",
+                "long consonant runs, no readable words",
+                20,
+            ),
         ]
         score = 45 + min(n_hi, 20) * 2
         if d["nx"] >= 5:
             reasons.append(
                 _reason(
+                    "alert.dga_domain.reason.many_nxdomain",
                     "Many NXDOMAIN replies",
                     f"{d['nx']} domains failed to resolve (typical of DGA rotation)",
                     20,
+                    nx=d["nx"],
                 )
             )
             score += 10
@@ -771,6 +1041,12 @@ def rule_dga_domains(dns_txns: list[dict]) -> list[RuleResult]:
                     f"(capture baseline entropy {baseline:.2f}). Domains like these are usually "
                     f"generated by malware DGAs to evade static blocklists."
                 ),
+                title_params={"client": client, "count": n_hi},
+                explanation_params={
+                    "client": client,
+                    "count": n_hi,
+                    "baseline": f"{baseline:.2f}",
+                },
             )
         )
     return results
@@ -808,21 +1084,42 @@ def rule_data_exfiltration(flows: list[dict], dns_txns: list[dict]) -> list[Rule
         if baseline > 0 and bytes_ > baseline * 20:
             reasons.append(
                 _reason(
-                    "Volume far above baseline", f"{bytes_} bytes vs median {baseline} per destination", 35
+                    "alert.data_exfiltration.reason.above_baseline",
+                    "Volume far above baseline",
+                    f"{bytes_} bytes vs median {baseline} per destination",
+                    35,
+                    bytes=bytes_,
+                    baseline=baseline,
                 )
             )
             score += 35
         if dst not in resolved:
             reasons.append(
-                _reason("First-contact destination", f"{dst} never resolved via DNS in this capture", 25)
+                _reason(
+                    "alert.data_exfiltration.reason.first_contact",
+                    "First-contact destination",
+                    f"{dst} never resolved via DNS in this capture",
+                    25,
+                    dst=dst,
+                )
             )
             score += 25
         duration = max(f["last_seen"] - f["first_seen"] for f in d["flows"])
         if duration < 30:
-            reasons.append(_reason("Short transfer window", f"{bytes_} bytes moved in {duration:.0f}s", 15))
+            reasons.append(
+                _reason(
+                    "alert.data_exfiltration.reason.short_window",
+                    "Short transfer window",
+                    f"{bytes_} bytes moved in {duration:.0f}s",
+                    15,
+                    bytes=bytes_,
+                    duration=f"{duration:.0f}",
+                )
+            )
             score += 15
         if not reasons:
             continue
+        first_contact = dst not in resolved
         results.append(
             RuleResult(
                 rule_name="data_exfiltration",
@@ -842,9 +1139,16 @@ def rule_data_exfiltration(flows: list[dict], dns_txns: list[dict]) -> list[Rule
                 related_flow_ids=[f["_alert_flow_id"] for f in d["flows"][:20]],
                 explanation=(
                     f"Host {src} transferred {bytes_} bytes to external host {dst} "
-                    f"({'which was never resolved via DNS — first contact' if dst not in resolved else 'in a short window'}) "
+                    f"({'which was never resolved via DNS — first contact' if first_contact else 'in a short window'}) "
                     f"— consistent with data exfiltration."
                 ),
+                explanation_key=(
+                    "alert.data_exfiltration.explanation_first_contact"
+                    if first_contact
+                    else "alert.data_exfiltration.explanation_short"
+                ),
+                title_params={"src": src, "dst": dst, "bytes": bytes_},
+                explanation_params={"src": src, "bytes": bytes_, "dst": dst},
             )
         )
     return results
@@ -878,10 +1182,28 @@ def rule_low_slow_beaconing(flows: list[dict]) -> list[RuleResult]:
 
         reasons = [
             _reason(
-                "Long-interval periodicity", f"{len(times)} connections at ~{mean / 60:.0f}min intervals", 40
+                "alert.low_slow_beaconing.reason.long_period",
+                "Long-interval periodicity",
+                f"{len(times)} connections at ~{mean / 60:.0f}min intervals",
+                40,
+                conn_count=len(times),
+                minutes=f"{mean / 60:.0f}",
             ),
-            _reason("Low and slow cadence", "few, spread-out check-ins designed to evade rate alerts", 25),
-            _reason("Repeated destination", f"{dst}:{dport} contacted {len(group)} times", 20),
+            _reason(
+                "alert.low_slow_beaconing.reason.low_slow_cadence",
+                "Low and slow cadence",
+                "few, spread-out check-ins designed to evade rate alerts",
+                25,
+            ),
+            _reason(
+                "alert.low_slow_beaconing.reason.repeated_destination",
+                "Repeated destination",
+                f"{dst}:{dport} contacted {len(group)} times",
+                20,
+                dst=dst,
+                dport=dport,
+                count=len(group),
+            ),
         ]
         score = _clamp(55 + min(len(group), 10) * 2)
         results.append(
@@ -906,6 +1228,19 @@ def rule_low_slow_beaconing(flows: list[dict]) -> list[RuleResult]:
                     f"~{mean / 60:.0f}-minute intervals — low-and-slow C2 cadence that evades "
                     f"short-window rate-based detection."
                 ),
+                title_params={
+                    "src": src,
+                    "dst": dst,
+                    "dport": dport,
+                    "minutes": f"{mean / 60:.0f}",
+                },
+                explanation_params={
+                    "src": src,
+                    "dst": dst,
+                    "dport": dport,
+                    "conn_count": len(group),
+                    "minutes": f"{mean / 60:.0f}",
+                },
             )
         )
     return results
@@ -935,9 +1270,20 @@ def rule_suspicious_user_agent(http_txns: list[dict]) -> list[RuleResult]:
                 score=int(score),
                 reasons=[
                     _reason(
-                        "Tool/malware UA fingerprint", f"{len(txns)} requests with UA matching {label}", 40
+                        "alert.suspicious_user_agent.reason.ua_fingerprint",
+                        "Tool/malware UA fingerprint",
+                        f"{len(txns)} requests with UA matching {label}",
+                        40,
+                        count=len(txns),
+                        label=label,
                     ),
-                    _reason("Sample UA", f'"{ua_sample}"', 15),
+                    _reason(
+                        "alert.suspicious_user_agent.reason.sample_ua",
+                        "Sample UA",
+                        f'"{ua_sample}"',
+                        15,
+                        ua=ua_sample,
+                    ),
                 ],
                 evidence={
                     "matched_label": label,
@@ -952,6 +1298,12 @@ def rule_suspicious_user_agent(http_txns: list[dict]) -> list[RuleResult]:
                     f"{len(txns)} HTTP requests carried a user agent matching {label} — "
                     f'"{ua_sample}". Legitimate browsers rarely send these fingerprints.'
                 ),
+                title_params={"label": label, "count": len(txns)},
+                explanation_params={
+                    "count": len(txns),
+                    "label": label,
+                    "ua": ua_sample,
+                },
             )
         )
     return results
@@ -1018,6 +1370,15 @@ def _build_incident(source_ip: str, alerts: list[dict]) -> dict:
             f"over {ts_max - ts_min:.0f}s — correlated activity suggests a single campaign "
             f"rather than isolated events."
         ),
+        "title_key": "incident.title",
+        "title_params": {"source_ip": source_ip, "rules": " + ".join(rules)},
+        "story_key": "incident.story",
+        "story_params": {
+            "source_ip": source_ip,
+            "count": len(alerts),
+            "rules": ", ".join(rules),
+            "seconds": f"{ts_max - ts_min:.0f}",
+        },
     }
 
 

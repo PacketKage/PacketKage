@@ -1,25 +1,38 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useT } from '../i18n/LocaleContext'
+import { currentLocale, type Locale } from '../i18n/locale'
 
 /* ------------------------------------------------------------------ */
-/* Formatters (existing API, unchanged)                                */
+/* Formatters — locale-aware; every call site passes a Locale when it   */
+/* already has one (pages/components), otherwise the module-level       */
+/* current locale is applied.                                          */
 /* ------------------------------------------------------------------ */
 
-export function formatBytes(bytes: number): string {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
+const UNIT_NAMES: Record<Locale, string[]> = {
+  en: ['B', 'KB', 'MB', 'GB'],
+  fr: ['o', 'Ko', 'Mo', 'Go'],
+}
+
+export function formatBytes(bytes: number, locale?: Locale): string {
+  const loc = locale ?? currentLocale()
+  if (!bytes) return loc === 'fr' ? '0 o' : '0 B'
+  const units = UNIT_NAMES[loc]
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`
 }
 
-export function formatTime(ts: number | null): string {
+export function formatTime(ts: number | null, locale?: Locale): string {
   if (ts == null) return '—'
-  return new Date(ts * 1000).toLocaleTimeString()
+  return new Date(ts * 1000).toLocaleTimeString(locale ?? currentLocale())
 }
 
-export function formatDuration(start: number | null, end: number | null): string {
+export function formatDuration(start: number | null, end: number | null, locale?: Locale): string {
   if (start == null || end == null) return '—'
   const s = Math.max(0, end - start)
+  if (locale === 'fr') {
+    return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)}s`
+  }
   return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
 }
 
@@ -119,9 +132,12 @@ const STATUS_TONES: Record<string, BadgeTone> = {
 }
 
 export function StatusPill({ status }: { status: string }) {
+  const t = useT()
   return (
     <Badge tone={STATUS_TONES[status] ?? 'neutral'}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {t(`status.${status}`, undefined) === `status.${status}`
+        ? status.charAt(0).toUpperCase() + status.slice(1)
+        : t(`status.${status}`)}
     </Badge>
   )
 }
@@ -131,12 +147,13 @@ export function StatusPill({ status }: { status: string }) {
 /* ------------------------------------------------------------------ */
 
 export function Spinner({ size = 16, className = '' }: { size?: number; className?: string }) {
+  const label = useT()('common.loading')
   return (
     <Loader2
       size={size}
       className={`animate-spin text-fg-subtle ${className}`}
       role="status"
-      aria-label="Loading"
+      aria-label={label}
     />
   )
 }
@@ -149,11 +166,13 @@ export function SkeletonRow({ className = '' }: { className?: string }) {
 /* Loading skeletons (initial data load only — not background refresh) */
 /* ------------------------------------------------------------------ */
 
-/** A11y wrapper: announces "Loading…" to screen readers while showing skeletons. */
-export function SkeletonStatus({ label = 'Loading…', children }: { label?: string; children: React.ReactNode }) {
+/** A11y wrapper: announces a loading message to screen readers while showing skeletons. */
+export function SkeletonStatus({ label, children }: { label?: string; children: React.ReactNode }) {
+  const t = useT()
+  const resolved = label ?? t('common.loading')
   return (
-    <div role="status" aria-label={label}>
-      <span className="sr-only">{label}</span>
+    <div role="status" aria-label={resolved}>
+      <span className="sr-only">{resolved}</span>
       {children}
     </div>
   )

@@ -19,6 +19,7 @@ import type {
   MappedClassification,
 } from '../types/api'
 import { Badge, formatBytes, formatTime } from '../components/ui'
+import { useT } from '../i18n/LocaleContext'
 
 // ---- shared chips ----------------------------------------------------------
 
@@ -27,14 +28,15 @@ const PROVENANCE_TONE: Record<GraphProvenance, 'neutral' | 'info' | 'accent' | '
   correlated: 'accent',
   enriched: 'warning',
 }
-const PROVENANCE_LABEL: Record<GraphProvenance, string> = {
-  observed: 'observed',
-  correlated: 'correlated',
-  enriched: 'enriched',
+const PROVENANCE_KEYS: Record<GraphProvenance, string> = {
+  observed: 'graph_panels.provenance.observed',
+  correlated: 'graph_panels.provenance.correlated',
+  enriched: 'graph_panels.provenance.enriched',
 }
 
 export function ProvenanceChip({ provenance }: { provenance: GraphProvenance }) {
-  return <Badge tone={PROVENANCE_TONE[provenance] ?? 'neutral'}>{PROVENANCE_LABEL[provenance]}</Badge>
+  const t = useT()
+  return <Badge tone={PROVENANCE_TONE[provenance] ?? 'neutral'}>{t(PROVENANCE_KEYS[provenance])}</Badge>
 }
 
 export function RelationshipChip({ relationship }: { relationship: string }) {
@@ -45,6 +47,7 @@ export function RelationshipChip({ relationship }: { relationship: string }) {
 const OFFICIAL_MITRE_ID = /^T\d{4}(\.\d{3})?$/
 
 export function MitreChip({ mitre }: { mitre: MappedClassification | null | undefined }) {
+  const t = useT()
   if (!mitre) return null
   // Official ATT&CK styling ONLY for mitre-source entries with a valid
   // T-patterned ID — anything else (internal classification, or a stale/
@@ -54,7 +57,7 @@ export function MitreChip({ mitre }: { mitre: MappedClassification | null | unde
     mitre.source === 'mitre' && !!mitre.technique_id && OFFICIAL_MITRE_ID.test(mitre.technique_id)
   if (official) {
     return (
-      <Badge tone="warning" className="font-mono" title="MITRE ATT&CK technique">
+      <Badge tone="warning" className="font-mono" title={t('graph_panels.mitre.official')}>
         {mitre.technique_id} · {mitre.technique}
       </Badge>
     )
@@ -65,7 +68,7 @@ export function MitreChip({ mitre }: { mitre: MappedClassification | null | unde
     <Badge
       tone="neutral"
       className="font-mono"
-      title="PacketKage internal classification — not a MITRE ATT&CK technique"
+      title={t('graph_panels.mitre.internal')}
     >
       PK · {mitre.technique}
     </Badge>
@@ -92,6 +95,7 @@ export function SeverityChip({ severity }: { severity: string }) {
 
 /** "Why is this relationship suspicious?" + the evidence chain for one edge. */
 export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; captureId: string }) {
+  const t = useT()
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['graphEdge', captureId, edge.id],
     queryFn: () => api.getGraphEdge(captureId, edge.id),
@@ -105,23 +109,23 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
         <RelationshipChip relationship={e.relationship} />
         <ProvenanceChip provenance={e.provenance} />
         {e.protocol && <Badge tone="neutral">{e.protocol}{e.port ? `:${e.port}` : ''}</Badge>}
-        <Badge tone="neutral">{e.count} observation{e.count === 1 ? '' : 's'}</Badge>
+        <Badge tone="neutral">{t('graph_panels.edge.observations', { count: e.count })}</Badge>
       </div>
 
       {/* timeline of the relationship */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-surface-2/60 p-2 ring-1 ring-border">
-          <div className="text-fg-subtle">First seen</div>
+          <div className="text-fg-subtle">{t('graph_panels.edge.first_seen')}</div>
           <div className="mt-0.5 font-mono text-fg-muted">{formatTime(e.first_seen)}</div>
         </div>
         <div className="rounded-lg bg-surface-2/60 p-2 ring-1 ring-border">
-          <div className="text-fg-subtle">Last seen</div>
+          <div className="text-fg-subtle">{t('graph_panels.edge.last_seen')}</div>
           <div className="mt-0.5 font-mono text-fg-muted">{formatTime(e.last_seen)}</div>
         </div>
       </div>
       {(e.packets > 0 || e.bytes > 0) && (
         <div className="flex gap-3 text-xs text-fg-muted">
-          <span className="tabular-nums">{e.packets.toLocaleString()} packets</span>
+          <span className="tabular-nums">{t('graph_panels.edge.packets', { count: e.packets.toLocaleString() })}</span>
           <span className="tabular-nums">{formatBytes(e.bytes)}</span>
         </div>
       )}
@@ -131,7 +135,7 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
         <div className="rounded-lg border border-warning/30 bg-warning/5 p-3">
           <div className="mb-1 flex items-center gap-1.5 text-sm font-medium text-warning">
             <ShieldQuestion size={14} aria-hidden />
-            Why is this relationship suspicious?
+            {t('graph_panels.edge.why_suspicious')}
           </div>
           <p className="text-xs leading-relaxed text-fg-muted">{e.explanation}</p>
         </div>
@@ -139,27 +143,26 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
         <div className="rounded-lg border border-border bg-surface-2/40 p-3 text-xs text-fg-subtle">
           <div className="mb-1 flex items-center gap-1.5 font-medium text-fg-muted">
             <ShieldQuestion size={14} aria-hidden />
-            Why is this relationship suspicious?
+            {t('graph_panels.edge.why_suspicious')}
           </div>
-          No alerts in this capture touch this relationship. It is rendered from
-          observed traffic only, with no suspicion claim.
+          {t('graph_panels.edge.no_alert')}
         </div>
       )}
 
       {/* alerts evidence */}
-      {isLoading && <p className="text-xs text-fg-subtle">Loading evidence…</p>}
-      {isError && <p className="text-xs text-danger">Evidence request failed.</p>}
+      {isLoading && <p className="text-xs text-fg-subtle">{t('graph_panels.loading_evidence')}</p>}
+      {isError && <p className="text-xs text-danger">{t('graph_panels.edge.evidence_error')}</p>}
       {e.alerts && e.alerts.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-            Detections ({e.alerts.length})
+            {t('graph_panels.edge.detections', { count: e.alerts.length })}
           </h4>
           {e.alerts.map((a) => (
             <div key={a.id} className="rounded-lg border border-border bg-surface-2/50 p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <SeverityChip severity={a.severity} />
                 <span className="text-sm font-medium text-fg">{a.title}</span>
-                <span className="ml-auto font-mono text-xs text-fg-subtle">score {a.score}</span>
+                <span className="ml-auto font-mono text-xs text-fg-subtle">{t('graph_panels.edge.score', { score: a.score })}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <MitreChip mitre={a.mitre} />
@@ -171,7 +174,7 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
                       <AlertTriangle size={11} className="mt-0.5 shrink-0 text-warning" aria-hidden />
                       <span>
                         <span className="text-fg">{r.reason}:</span> {r.detail}{' '}
-                        <span className="text-fg-subtle">(weight {r.weight})</span>
+                        <span className="text-fg-subtle">{t('graph_panels.edge.weight', { weight: r.weight })}</span>
                       </span>
                     </li>
                   ))}
@@ -189,10 +192,10 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
       {e.flows && e.flows.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-            Contributing flows ({e.flows.length})
+            {t('graph_panels.edge.contributing_flows', { count: e.flows.length })}
             {e.flow_ids.length > e.flows.length && (
               <span className="ml-2 font-normal normal-case text-fg-subtle">
-                showing first {e.flows.length} of {e.flow_ids.length}
+                {t('graph_panels.edge.showing_first', { shown: e.flows.length, total: e.flow_ids.length })}
               </span>
             )}
           </h4>
@@ -206,14 +209,14 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
                   {f.source_ip} <ArrowRight size={10} className="inline" aria-hidden /> {f.destination_ip}:{f.destination_port}
                 </span>
                 <Badge tone="neutral">{f.application_protocol ?? f.transport_protocol}</Badge>
-                <span className="tabular-nums text-fg-subtle">{f.packets} pkts</span>
+                <span className="tabular-nums text-fg-subtle">{t('graph_panels.edge.pkts', { count: f.packets })}</span>
                 <span className="tabular-nums text-fg-subtle">{formatBytes(f.bytes)}</span>
                 <span className="text-fg-subtle">{formatTime(f.first_seen)}</span>
                 <Link
                   to={`/flows?capture_id=${captureId}&flow=${f.id}`}
                   className="ml-auto inline-flex items-center gap-1 text-info hover:underline"
                 >
-                  packets <ExternalLink size={11} aria-hidden />
+                  {t('graph_panels.edge.packets_link')} <ExternalLink size={11} aria-hidden />
                 </Link>
               </div>
             ))}
@@ -223,13 +226,17 @@ export function EdgeProvenancePanel({ edge, captureId }: { edge: GraphV2Edge; ca
 
       {/* raw references */}
       <div className="border-t border-border pt-2 text-xs text-fg-subtle">
-        <span className="font-mono">{e.flow_ids.length}</span> flow refs ·{' '}
-        <span className="font-mono">{e.alert_ids.length}</span> alert refs ·{' '}
-        <span className="font-mono">{e.packet_refs.length}</span> packet refs
+        {t('graph_panels.edge.refs', {
+          flows: e.flow_ids.length,
+          alerts: e.alert_ids.length,
+          packets: e.packet_refs.length,
+        })}
         {e.packet_refs.length > 0 && (
           <span className="ml-2 font-mono">
-            (packets #{e.packet_refs.slice(0, 8).join(', #')}
-            {e.packet_refs.length > 8 ? ', …' : ''})
+            {t('graph_panels.edge.packet_range', {
+              ids: e.packet_refs.slice(0, 8).join(', #'),
+              more: e.packet_refs.length > 8 ? ', …' : '',
+            })}
           </span>
         )}
       </div>
@@ -256,12 +263,13 @@ export function NodeDetailPanel({
     queryKey: ['graphNode', captureId, nodeId],
     queryFn: () => api.getGraphNode(captureId, nodeId),
   })
+  const t = useT()
 
   if (isLoading) {
-    return <div className="p-4 text-sm text-fg-subtle">Loading node…</div>
+    return <div className="p-4 text-sm text-fg-subtle">{t('graph_panels.node.loading')}</div>
   }
   if (isError || !data) {
-    return <div className="p-4 text-sm text-danger">Node not found in this capture.</div>
+    return <div className="p-4 text-sm text-danger">{t('graph_panels.node.not_found')}</div>
   }
   return <NodeDetailBody detail={data} onClose={onClose} onBlast={onBlast} onPath={onPath} />
 }
@@ -278,6 +286,7 @@ function NodeDetailBody({
   onPath: (nodeId: string) => void
 }) {
   const { node, edges, stats } = detail
+  const t = useT()
   return (
     <div className="p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -287,7 +296,7 @@ function NodeDetailBody({
             <Badge tone="neutral">{node.kind}</Badge>
             {node.internal != null && (
               <Badge tone={node.internal ? 'success' : 'neutral'}>
-                {node.internal ? 'internal' : 'external'}
+                {node.internal ? t('graph_panels.node.internal') : t('graph_panels.node.external')}
               </Badge>
             )}
             {node.severity && <SeverityChip severity={node.severity} />}
@@ -295,7 +304,11 @@ function NodeDetailBody({
             <MitreChip mitre={node.mitre} />
           </div>
         </div>
-        <button onClick={onClose} aria-label="Close" className="text-fg-subtle hover:text-fg-muted">
+        <button
+          onClick={onClose}
+          aria-label={t('graph_panels.node.close')}
+          className="text-fg-subtle hover:text-fg-muted"
+        >
           ✕
         </button>
       </div>
@@ -303,11 +316,11 @@ function NodeDetailBody({
       {node.kind === 'host' && (
         <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
           <div className="rounded-lg bg-surface-2/60 p-2 ring-1 ring-border">
-            <div className="text-fg-subtle">Sent</div>
+            <div className="text-fg-subtle">{t('graph_panels.node.sent')}</div>
             <div className="mt-0.5 font-mono tabular-nums text-fg-muted">{formatBytes(node.bytes_sent ?? 0)}</div>
           </div>
           <div className="rounded-lg bg-surface-2/60 p-2 ring-1 ring-border">
-            <div className="text-fg-subtle">Received</div>
+            <div className="text-fg-subtle">{t('graph_panels.node.received')}</div>
             <div className="mt-0.5 font-mono tabular-nums text-fg-muted">{formatBytes(node.bytes_received ?? 0)}</div>
           </div>
         </div>
@@ -316,7 +329,7 @@ function NodeDetailBody({
       {node.reasons && node.reasons.length > 0 && (
         <div className="mb-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-warning">
-            Detection reasons
+            {t('graph_panels.node.detection_reasons')}
           </div>
           <ul className="space-y-1">
             {node.reasons.map((r, i) => (
@@ -338,13 +351,13 @@ function NodeDetailBody({
               onClick={() => onBlast(node.id)}
               className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20"
             >
-              Blast radius →
+              {t('graph_panels.node.blast_radius')}
             </button>
             <button
               onClick={() => onPath(node.id)}
               className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20"
             >
-              Attack path from here →
+              {t('graph_panels.node.attack_path')}
             </button>
           </>
         )}
@@ -352,15 +365,15 @@ function NodeDetailBody({
 
       <div className="mb-1.5 flex items-center justify-between">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-          Relationships ({edges.length})
+          {t('graph_panels.node.relationships', { count: edges.length })}
         </h4>
         <span className="text-xs text-fg-subtle">
-          {stats.alert_backed_edges} alert-backed
+          {t('graph_panels.node.alert_backed', { count: stats.alert_backed_edges })}
         </span>
       </div>
       <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {edges.length === 0 && (
-          <p className="text-xs text-fg-subtle">No relationships in this capture.</p>
+          <p className="text-xs text-fg-subtle">{t('graph_panels.node.no_relationships')}</p>
         )}
         {edges.map((e) => (
           <div
@@ -372,7 +385,9 @@ function NodeDetailBody({
             </span>
             <RelationshipChip relationship={e.relationship} />
             <ProvenanceChip provenance={e.provenance} />
-            {e.alert_ids.length > 0 && <Badge tone="danger">{e.alert_ids.length} alerts</Badge>}
+            {e.alert_ids.length > 0 && (
+              <Badge tone="danger">{t('graph_panels.node.alerts', { count: e.alert_ids.length })}</Badge>
+            )}
             <span className="ml-auto tabular-nums text-fg-subtle">{formatTime(e.last_seen)}</span>
           </div>
         ))}
@@ -389,20 +404,18 @@ function NodeDetailBody({
  * every row links to real PacketKage data (alerts + flow deep links).
  */
 export function EvidenceChainList({ graph, captureId }: { graph: GraphV2; captureId: string }) {
+  const t = useT()
   const suspicious = graph.edges.filter((e) => e.alert_ids.length > 0)
   if (!suspicious.length) {
     return (
       <div className="rounded-xl border border-border bg-surface-2/50 p-8 text-center text-sm text-fg-muted">
-        No alert-backed relationships in this capture — nothing to trace.
+        {t('graph_panels.evidence.no_alert')}
       </div>
     )
   }
   return (
     <div className="space-y-3">
-      <p className="text-xs text-fg-subtle">
-        Each chain is assembled at render time from real alerts and flows — nothing
-        here is inferred or external.
-      </p>
+      <p className="text-xs text-fg-subtle">{t('graph_panels.evidence.intro')}</p>
       {suspicious.map((edge) => {
         const src = graph.nodes.find((n) => n.id === edge.source)
         const dst = graph.nodes.find((n) => n.id === edge.target)
@@ -424,13 +437,13 @@ export function EvidenceChainList({ graph, captureId }: { graph: GraphV2; captur
                   <span className="text-xs text-fg-muted">{edge.explanation}</span>
                 ) : (
                   <span className="text-xs text-fg-subtle">
-                    Relationship flagged by {edge.alert_ids.length} alert(s).
+                    {t('graph_panels.chain.flagged', { count: edge.alert_ids.length })}
                   </span>
                 )}
               </ChainStep>
               <ChainStep index={2} label="Detections">
                 <span className="text-xs text-fg-muted">
-                  {edge.alert_ids.length} alert(s) — open the relationship for full reasons:
+                  {t('graph_panels.chain.detections_detail', { count: edge.alert_ids.length })}
                 </span>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {edge.alert_ids.slice(0, 10).map((aid) => (
@@ -446,8 +459,10 @@ export function EvidenceChainList({ graph, captureId }: { graph: GraphV2; captur
               </ChainStep>
               <ChainStep index={3} label="Evidence">
                 <span className="text-xs text-fg-muted">
-                  {edge.flow_ids.length} flow(s), {edge.packet_refs.length} packet reference(s)
-                  backing this relationship.
+                  {t('graph_panels.chain.evidence_detail', {
+                    flows: edge.flow_ids.length,
+                    packets: edge.packet_refs.length,
+                  })}
                 </span>
               </ChainStep>
               <ChainStep index={4} label="Flows / Observations">
@@ -466,8 +481,11 @@ export function EvidenceChainList({ graph, captureId }: { graph: GraphV2; captur
               <ChainStep index={5} label="PCAP reference">
                 <span className="text-xs text-fg-muted">
                   {edge.packet_refs.length > 0
-                    ? `Packet ordinals #${edge.packet_refs.slice(0, 6).join(', #')}${edge.packet_refs.length > 6 ? ', …' : ''} — open any flow to view raw packet evidence.`
-                    : 'Packet-level references live on the contributing flows — open one to view raw evidence.'}
+                    ? t('graph_panels.chain.pcap_with_packets', {
+                        ids: edge.packet_refs.slice(0, 6).join(', #'),
+                        more: edge.packet_refs.length > 6 ? ', …' : '',
+                      })
+                    : t('graph_panels.chain.pcap_none')}
                 </span>
               </ChainStep>
             </ol>

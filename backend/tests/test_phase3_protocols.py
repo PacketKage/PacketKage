@@ -155,6 +155,15 @@ def test_is_private_ip_v6_unit():
     # global
     assert not is_private_ip("2606:4700:4700::1111")
     assert not is_private_ip("2001:db8::1")
+    # IPv4-mapped IPv6
+    assert is_private_ip("::ffff:10.0.0.1")
+    assert is_private_ip("::ffff:192.168.1.100")
+    assert is_private_ip("::ffff:127.0.0.1")
+    assert not is_private_ip("::ffff:8.8.8.8")
     # v4 unchanged
     assert is_private_ip("192.168.1.1")
     assert not is_private_ip("8.8.8.8")
+    # edge/invalid inputs
+    assert not is_private_ip(None)
+    assert not is_private_ip("")
+    assert not is_private_ip("not-an-ip")

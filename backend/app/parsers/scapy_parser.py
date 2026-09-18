@@ -344,6 +344,8 @@ class ScapyParser(PacketParser):
                     if version:
                         metadata["tls.record_version"] = version
             except Exception:
+                # Best-effort: TLS record parsing on non-TLS ports or malformed records
+                # should never break the main parsing loop.
                 pass
 
         # ---- Plain-text protocol banners (server greeting strings) ----
@@ -362,7 +364,8 @@ class ScapyParser(PacketParser):
                     # FTP: "220 ftp.example.com FTP server ready" / "220-..."
                     elif text.startswith("220-") or "FTP" in text[:40]:
                         metadata["ftp.banner"] = text
-            except Exception:
+            except (UnicodeError, IndexError, AttributeError):
+                # Best-effort: banner decoding/parsing on arbitrary payloads.
                 pass
 
         # ---- DHCP: message type + hostname option via BOOTP layer ----
@@ -396,7 +399,8 @@ class ScapyParser(PacketParser):
                                 )
                 if bootp.yiaddr and str(bootp.yiaddr) != "0.0.0.0":
                     metadata["dhcp.assigned_ip"] = str(bootp.yiaddr)
-            except Exception:
+            except (KeyError, ValueError, TypeError, AttributeError):
+                # Best-effort: DHCP option parsing on malformed packets.
                 pass
 
     @staticmethod

@@ -13,6 +13,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { SetupPage } from './pages/SetupPage'
 import { AuthProvider } from './auth/AuthContext'
 import { RequireAdmin, RequireAuth } from './auth/guards'
+import { LocaleProvider } from './i18n/LocaleContext'
 
 // Route-level code splitting: heavy deps (recharts/cytoscape/table) only load with their page
 const CapturePage = lazy(() =>
@@ -105,7 +106,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <LocaleProvider>
+          <RouterProvider router={router} />
+        </LocaleProvider>
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,

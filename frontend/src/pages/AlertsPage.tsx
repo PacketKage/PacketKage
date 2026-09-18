@@ -9,39 +9,48 @@ import { mutateError, mutateSuccess } from '../components/toasts'
 import { SkeletonRow, SkeletonStatus, formatTime } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { fetchAllPages, useCsvExport } from '../hooks/useCsvExport'
+import { translate } from '../i18n/locale'
+import { useT } from '../i18n/LocaleContext'
 import { csvTime } from '../utils/csv'
 import type { Alert } from '../types/api'
 
-const SEVERITY_STYLE: Record<string, { badge: string; bar: string; label: string }> = {
-  critical: { badge: 'bg-danger/10 text-danger ring-danger/30', bar: 'bg-danger', label: 'CRITICAL' },
-  high: { badge: 'bg-warning/10 text-warning ring-warning/30', bar: 'bg-warning', label: 'HIGH' },
-  medium: { badge: 'bg-warning/10 text-warning ring-warning/30', bar: 'bg-warning', label: 'MEDIUM' },
-  low: { badge: 'bg-info/10 text-info ring-info/30', bar: 'bg-info', label: 'LOW' },
-  info: { badge: 'bg-fg/10 text-fg-muted ring-fg/20', bar: 'bg-fg-muted', label: 'INFO' },
+const SEVERITY_STYLE: Record<string, { badge: string; bar: string; labelKey: string }> = {
+  critical: { badge: 'bg-danger/10 text-danger ring-danger/30', bar: 'bg-danger', labelKey: 'alerts.severity.critical' },
+  high: { badge: 'bg-warning/10 text-warning ring-warning/30', bar: 'bg-warning', labelKey: 'alerts.severity.high' },
+  medium: { badge: 'bg-warning/10 text-warning ring-warning/30', bar: 'bg-warning', labelKey: 'alerts.severity.medium' },
+  low: { badge: 'bg-info/10 text-info ring-info/30', bar: 'bg-info', labelKey: 'alerts.severity.low' },
+  info: { badge: 'bg-fg/10 text-fg-muted ring-fg/20', bar: 'bg-fg-muted', labelKey: 'alerts.severity.info' },
 }
 
-const RULE_LABELS: Record<string, string> = {
-  port_scan: 'Port Scan',
-  beaconing: 'Beaconing',
-  dns_tunneling: 'DNS Tunneling',
-  nxdomain_burst: 'NXDOMAIN Burst',
-  suspicious_port: 'Suspicious Port',
-  excessive_connection_failures: 'Connection Failures',
-  connection_without_dns: 'Direct IP Connection',
-  high_outbound_volume: 'High Outbound Volume',
-  arp_spoofing: 'ARP Spoofing',
-  lateral_movement: 'Lateral Movement',
-  dga_domain: 'DGA Domains',
-  data_exfiltration: 'Data Exfiltration',
-  low_slow_beaconing: 'Low-and-Slow Beaconing',
-  suspicious_user_agent: 'Suspicious User Agent',
+const RULE_KEYS: Record<string, string> = {
+  port_scan: 'alerts.rule.port_scan',
+  beaconing: 'alerts.rule.beaconing',
+  dns_tunneling: 'alerts.rule.dns_tunneling',
+  nxdomain_burst: 'alerts.rule.nxdomain_burst',
+  suspicious_port: 'alerts.rule.suspicious_port',
+  excessive_connection_failures: 'alerts.rule.excessive_connection_failures',
+  connection_without_dns: 'alerts.rule.connection_without_dns',
+  high_outbound_volume: 'alerts.rule.high_outbound_volume',
+  arp_spoofing: 'alerts.rule.arp_spoofing',
+  lateral_movement: 'alerts.rule.lateral_movement',
+  dga_domain: 'alerts.rule.dga_domain',
+  data_exfiltration: 'alerts.rule.data_exfiltration',
+  low_slow_beaconing: 'alerts.rule.low_slow_beaconing',
+  suspicious_user_agent: 'alerts.rule.suspicious_user_agent',
 }
 
 const isUntriaged = (a: Alert) =>
   !a.tags.includes('confirmed') && !a.tags.includes('false-positive')
 
+const ruleLabel = (ruleName: string) => {
+  const key = RULE_KEYS[ruleName]
+  if (!key) return ruleName
+  return translate(key)
+}
+
 export function AlertsPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [severity, setSeverity] = useState('')
   const [unconfirmedOnly, setUnconfirmedOnly] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -61,13 +70,15 @@ export function AlertsPage() {
   // severity filter rides the query; the client-side "hide confirmed &
   // false-positives" filter is applied post-fetch so the file matches the screen.
   const alertExport = useCsvExport<Alert>({
-    label: 'alerts',
+    label: translate('alerts.csv.label'),
     headers: [
-      'Timestamp', 'Severity', 'Score', 'Rule', 'Title', 'Source IP',
-      'Destination IP', 'Destination Port', 'Acknowledged', 'Tags', 'Note',
+      translate('alerts.csv.timestamp'), translate('alerts.csv.severity'), translate('alerts.csv.score'),
+      translate('alerts.csv.rule'), translate('alerts.csv.title'), translate('alerts.csv.source_ip'),
+      translate('alerts.csv.destination_ip'), translate('alerts.csv.destination_port'),
+      translate('alerts.csv.acknowledged'), translate('alerts.csv.tags'), translate('alerts.csv.note'),
     ],
     toRow: (a) => [
-      csvTime(a.timestamp), a.severity, a.score, RULE_LABELS[a.rule_name] ?? a.rule_name,
+      csvTime(a.timestamp), a.severity, a.score, ruleLabel(a.rule_name),
       a.title, a.source_ip, a.destination_ip, a.destination_port, a.acknowledged, a.tags, a.note,
     ],
     fetchAll: async () => {
@@ -82,10 +93,10 @@ export function AlertsPage() {
     mutationFn: ({ id, acknowledged }: { id: string; acknowledged: boolean }) =>
       api.ackAlert(id, acknowledged),
     onSuccess: (_alert, vars) => {
-      mutateSuccess(vars.acknowledged ? 'Alert acknowledged' : 'Acknowledgement removed', `ack-${vars.id}`)
+      mutateSuccess(vars.acknowledged ? t('alerts.ack.success') : t('alerts.ack.removed'), `ack-${vars.id}`)
       queryClient.invalidateQueries({ queryKey: ['alerts'] })
     },
-    onError: (err, vars) => mutateError('Alert update', err, `ack-${vars.id}`),
+    onError: (err, vars) => mutateError(t('alerts.ack.action'), err, `ack-${vars.id}`),
   })
 
   const triage = useMutation({
@@ -99,10 +110,10 @@ export function AlertsPage() {
       note?: string
     }) => api.triageAlert(id, body),
     onSuccess: (_alert, vars) => {
-      mutateSuccess(vars.note !== undefined ? 'Note saved' : 'Triage updated', `triage-${vars.id}`)
+      mutateSuccess(vars.note !== undefined ? t('alerts.triage.note_saved') : t('alerts.triage.updated'), `triage-${vars.id}`)
       queryClient.invalidateQueries({ queryKey: ['alerts'] })
     },
-    onError: (err, vars) => mutateError('Triage update', err, `triage-${vars.id}`),
+    onError: (err, vars) => mutateError(t('alerts.triage.action'), err, `triage-${vars.id}`),
   })
 
   // capture summary for correlated incidents
@@ -120,10 +131,8 @@ export function AlertsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Alerts</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        Every alert is explainable — reasons, evidence, and the flows behind it.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('alerts.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('alerts.subtitle')}</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
@@ -137,7 +146,7 @@ export function AlertsPage() {
                 : 'text-fg-muted ring-border hover:text-fg'
             }`}
           >
-            {s || 'All'}
+            {s || t('common.all')}
             {s && counts[s] ? ` (${counts[s]})` : ''}
           </button>
         ))}
@@ -148,19 +157,19 @@ export function AlertsPage() {
             onChange={(e) => setUnconfirmedOnly(e.target.checked)}
             className="accent-accent"
           />
-          hide confirmed & false-positives
+          {t('alerts.hide_acknowledged')}
         </label>
         {effectiveCaptureId && (
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={alertExport.export}
               disabled={alertExport.isExporting || isLoading}
-              aria-label="Export alerts to CSV"
-              title="Export filtered alerts to CSV"
+              aria-label={t('alerts.export_aria')}
+              title={t('alerts.export_title')}
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:pointer-events-none disabled:opacity-50"
             >
               <Download size={12} aria-hidden />
-              {alertExport.isExporting ? 'Exporting…' : 'CSV'}
+              {alertExport.isExporting ? t('common.exporting') : t('common.csv')}
             </button>
             <a
               href={api.captureReportUrl(effectiveCaptureId)}
@@ -169,8 +178,8 @@ export function AlertsPage() {
               aria-disabled={captureDetail?.status !== 'completed'}
               title={
                 captureDetail?.status === 'completed'
-                  ? 'Open the HTML investigation report'
-                  : 'Capture must be analyzed before a report can be generated'
+                  ? t('alerts.report.open')
+                  : t('alerts.report.not_ready')
               }
               onClick={(e) => {
                 if (captureDetail?.status !== 'completed') e.preventDefault()
@@ -181,7 +190,7 @@ export function AlertsPage() {
                   : 'cursor-not-allowed text-fg-subtle opacity-50'
               }`}
             >
-              Download report (HTML/PDF)
+              {t('alerts.report.download')}
             </a>
           </div>
         )}
@@ -191,7 +200,7 @@ export function AlertsPage() {
       {incidents.length > 0 && (
         <div className="mb-6 space-y-2">
           <div className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-            Correlated incidents ({incidents.length})
+            {t('alerts.incidents.title', { count: incidents.length })}
           </div>
           {incidents.map((inc) => (
             <div
@@ -204,11 +213,12 @@ export function AlertsPage() {
                     (SEVERITY_STYLE[inc.severity] ?? SEVERITY_STYLE.info).badge
                   }`}
                 >
-                  {(SEVERITY_STYLE[inc.severity] ?? SEVERITY_STYLE.info).label}
+                  {(SEVERITY_STYLE[inc.severity] ?? SEVERITY_STYLE.info).labelKey &&
+                    translate((SEVERITY_STYLE[inc.severity] ?? SEVERITY_STYLE.info).labelKey)}
                 </span>
                 <span className="text-sm font-medium text-fg">{inc.title}</span>
                 <span className="ml-auto font-mono text-xs text-fg-subtle">
-                  {inc.alert_count} alerts · max score {inc.max_score}
+                  {t('alerts.incidents.alert_count', { count: inc.alert_count, max: inc.max_score })}
                 </span>
               </div>
               <p className="mt-1.5 text-xs leading-relaxed text-fg-muted">{inc.story}</p>
@@ -218,9 +228,9 @@ export function AlertsPage() {
       )}
 
       {!analyzed.length ? (
-        <EmptyState>No analyzed captures yet.</EmptyState>
+        <EmptyState>{t('alerts.empty.no_analyzed')}</EmptyState>
       ) : isLoading ? (
-        <SkeletonStatus label="Running suspicion engine…">
+        <SkeletonStatus label={t('alerts.skeleton')}>
           <div className="space-y-3" aria-hidden>
             {Array.from({ length: 6 }, (_, i) => (
               <div
@@ -242,18 +252,20 @@ export function AlertsPage() {
           </div>
         </SkeletonStatus>
       ) : isError ? (
-        <ErrorState message="Failed to load alerts." onRetry={() => refetch()} />
+        <ErrorState message={t('alerts.load_error')} onRetry={() => refetch()} />
       ) : !alerts.length ? (
         <div className="rounded-xl border border-accent/20 bg-accent/5 p-12 text-center">
           <Check size={36} className="mx-auto text-accent" aria-hidden />
-          <p className="mt-2 text-sm text-accent">No alerts matched — traffic looks clean.</p>
+          <p className="mt-2 text-sm text-accent">{t('alerts.empty.no_alerts')}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {page && page.total > allAlerts.length && (
             <div className="text-xs text-fg-subtle">
-              Showing first {allAlerts.length} of {page.total.toLocaleString()} alerts — export
-              to CSV for the full set.
+              {t('alerts.showing_first', {
+                shown: allAlerts.length.toLocaleString(),
+                total: page.total.toLocaleString(),
+              })}
             </div>
           )}
           {alerts.map((alert) => (
@@ -300,6 +312,7 @@ function AlertCard({
   triagePending?: boolean
 }) {
   const style = SEVERITY_STYLE[alert.severity] ?? SEVERITY_STYLE.info
+  const t = useT()
   const [showNote, setShowNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState(alert.note ?? '')
 
@@ -345,19 +358,19 @@ function AlertCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded px-2 py-0.5 text-xs font-bold ring-1 ${style.badge}`}>
-              {style.label}
+              {translate(style.labelKey)}
             </span>
             <span className="rounded bg-surface-3 px-2 py-0.5 text-xs font-medium text-fg-muted ring-1 ring-border">
-              {RULE_LABELS[alert.rule_name] ?? alert.rule_name}
+              {RULE_KEYS[alert.rule_name] ? translate(RULE_KEYS[alert.rule_name]) : alert.rule_name}
             </span>
             {alert.acknowledged && (
-              <span className="text-xs text-fg-subtle">acknowledged</span>
+              <span className="text-xs text-fg-subtle">{t('alerts.card.acknowledged')}</span>
             )}
           </div>
           <div className="mt-1 truncate text-sm font-medium text-fg">{alert.title}</div>
           <div className="mt-0.5 text-xs text-fg-subtle">
             {alert.timestamp != null && formatTime(alert.timestamp)}
-            {alert.source_ip && ` · source ${alert.source_ip}`}
+            {alert.source_ip && t('alerts.card.source', { ip: alert.source_ip })}
           </div>
         </div>
 
@@ -372,12 +385,12 @@ function AlertCard({
           {/* Host / destination */}
           <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
             <div>
-              <div className="text-xs uppercase tracking-wider text-fg-subtle">Host</div>
+              <div className="text-xs uppercase tracking-wider text-fg-subtle">{t('alerts.card.host')}</div>
               <div className="mt-0.5 font-mono text-fg">{alert.source_ip ?? '—'}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wider text-fg-subtle">
-                Destination
+                {t('alerts.card.destination')}
               </div>
               <div className="mt-0.5 font-mono text-fg">
                 {alert.destination_ip ?? '—'}
@@ -385,7 +398,7 @@ function AlertCard({
               </div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-fg-subtle">Risk</div>
+              <div className="text-xs uppercase tracking-wider text-fg-subtle">{t('alerts.card.risk')}</div>
               <div className="mt-0.5 font-semibold text-fg">{alert.score}/100</div>
             </div>
           </div>
@@ -393,7 +406,7 @@ function AlertCard({
           {/* Reasons */}
           <div className="mb-4">
             <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-              Reasons
+              {t('alerts.card.reasons')}
             </div>
             <div className="space-y-1">
               {alert.reasons.map((r, i) => (
@@ -411,7 +424,7 @@ function AlertCard({
           {/* Evidence JSON */}
           <div className="mb-4">
             <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-fg-subtle">
-              Evidence
+              {t('alerts.card.evidence')}
             </div>
             <div className="max-h-40 overflow-auto rounded-lg bg-surface/80 p-3 ring-1 ring-border">
               <EvidenceTable data={alert.evidence} />
@@ -442,10 +455,10 @@ function AlertCard({
               }`}
             >
               {ackPending
-                ? 'Saving…'
+                ? t('alerts.card.saving')
                 : alert.acknowledged
-                  ? 'Un-acknowledge'
-                  : 'Acknowledge'}
+                  ? t('alerts.card.unacknowledge')
+                  : t('alerts.card.acknowledge')}
             </button>
 
             {/* Triage tags */}
@@ -480,8 +493,8 @@ function AlertCard({
                 onClick={(e) => e.stopPropagation()}
                 className="rounded-lg px-3 py-1.5 text-xs text-info ring-1 ring-info/30 transition hover:bg-info/10"
               >
-                {alert.related_flow_ids.length} related flow{alert.related_flow_ids.length > 1 ? 's' : ''} →
-                view evidence
+                {t('alerts.card.related_flows', { count: alert.related_flow_ids.length })}
+                {t('alerts.card.view_evidence')}
               </a>
             )}
 
@@ -496,7 +509,7 @@ function AlertCard({
               }}
               className="rounded-lg px-2.5 py-1.5 text-xs text-fg-subtle ring-1 ring-border transition hover:text-fg-muted"
             >
-              {alert.note ? 'edit note' : '+ note'}
+              {alert.note ? t('alerts.card.edit_note') : t('alerts.card.add_note')}
             </button>
           </div>
 
@@ -507,8 +520,8 @@ function AlertCard({
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                placeholder="Analyst note — e.g. 'checked with John, this server is legit'"
-                aria-label="Analyst note"
+                placeholder={t('alerts.card.note_placeholder')}
+                aria-label={t('alerts.card.note_label')}
                 rows={2}
                 className="w-full rounded-lg border border-border bg-bg p-2.5 text-sm text-fg placeholder-fg-subtle focus:border-accent/50 focus:outline-none"
               />
@@ -522,7 +535,7 @@ function AlertCard({
                   disabled={triagePending}
                   className="rounded-lg bg-accent/10 px-3 py-1 text-xs text-accent ring-1 ring-accent/30 hover:bg-accent/20 disabled:opacity-50"
                 >
-                  {triagePending ? 'Saving…' : 'Save note'}
+                  {triagePending ? t('alerts.card.saving') : t('alerts.card.save_note')}
                 </button>
                 <button
                   onClick={(e) => {
@@ -531,7 +544,7 @@ function AlertCard({
                   }}
                   className="rounded-lg px-3 py-1 text-xs text-fg-muted ring-1 ring-border hover:text-fg"
                 >
-                  Cancel
+                  {t('alerts.card.cancel')}
                 </button>
               </div>
             </div>
@@ -540,7 +553,7 @@ function AlertCard({
           {/* Saved note display */}
           {alert.note && !showNote && (
             <div className="mt-3 rounded-lg border-l-2 border-accent/50 bg-surface/60 p-2.5 text-sm text-fg">
-              <span className="text-xs uppercase tracking-wider text-fg-subtle">Note</span>{' '}
+              <span className="text-xs uppercase tracking-wider text-fg-subtle">{t('alerts.card.note')}</span>{' '}
               {alert.note}
             </div>
           )}

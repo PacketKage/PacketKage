@@ -196,7 +196,7 @@ describe('useCsvExport — FlowsPage', () => {
     await clickExportWhenEnabled('Export flows to CSV')
 
     await vi.waitFor(() => {
-      expect(toastMock.success).toHaveBeenCalledWith('Exported 750 flows', { id: 'export-flows' })
+      expect(toastMock.success).toHaveBeenCalledWith('Exported 750 to CSV', { id: 'export-flows' })
     })
     // two pages fetched at the 500 cap: offset 0 then offset 500
     const exportUrls = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('/flows?'))
@@ -327,7 +327,7 @@ describe('useCsvExport — AlertsPage client filter', () => {
 
     await vi.waitFor(() => {
       // only the untriaged alert is exported
-      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alert', { id: 'export-alerts' })
+      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 to CSV', { id: 'export-alerts' })
     })
   })
 
@@ -354,8 +354,8 @@ describe('useCsvExport — AlertsPage client filter', () => {
     })
     await clickExportWhenEnabled()
 
-    await vi.waitFor(() => {
-      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 alert', { id: 'export-alerts' })
+await vi.waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith('Exported 1 to CSV', { id: 'export-alerts' })
     })
     const exportUrl = fetchMock.mock.calls
       .map(([u]) => String(u))

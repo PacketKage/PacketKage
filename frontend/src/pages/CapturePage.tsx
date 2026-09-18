@@ -7,9 +7,11 @@ import { StatusPill, formatBytes } from '../components/ui'
 import { mutateError, mutateSuccess, watchJobForToast } from '../components/toasts'
 import { useCaptures } from '../hooks/captures'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/LocaleContext'
 import type { Capture, Job } from '../types/api'
 
 export function CapturePage() {
+  const t = useT()
   const [selectedCapture, setSelectedCapture] = useState<Capture | null>(null)
   const [parser, setParser] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -27,12 +29,12 @@ export function CapturePage() {
     onSuccess: async (capture) => {
       setUploadError(null)
       setSelectedCapture(capture)
-      mutateSuccess(`Capture uploaded — ${capture.filename}`)
+      mutateSuccess(t('capture.uploaded', { filename: capture.filename }))
       await queryClient.invalidateQueries({ queryKey: ['captures'] })
     },
     onError: (err) => {
       setUploadError(err.message)
-      mutateError('Upload', err, 'capture-upload')
+      mutateError(t('capture.upload.action'), err, 'capture-upload')
     },
   })
 
@@ -41,12 +43,10 @@ export function CapturePage() {
     onSuccess: (job) => {
       setLiveJob(job)
       queryClient.invalidateQueries({ queryKey: ['captures'] })
-      mutateSuccess('Analysis started')
-      // completion/failure toast arrives via this watcher even if the
-      // analyst navigates away from the page mid-analysis
+      mutateSuccess(t('capture.analysis_started'))
       watchJobForToast(job.id)
     },
-    onError: (err) => mutateError('Starting analysis', err),
+    onError: (err) => mutateError(t('capture.analyze.action'), err),
   })
 
   // Delete needs to refresh everything that embeds capture data — the
@@ -56,12 +56,12 @@ export function CapturePage() {
     onSuccess: async (_result, captureId) => {
       setPendingDelete(null)
       if (selectedCapture?.id === captureId) setSelectedCapture(null)
-      mutateSuccess('Capture deleted')
+      mutateSuccess(t('capture.deleted'))
       await queryClient.invalidateQueries({ queryKey: ['captures'] })
       await queryClient.invalidateQueries({ queryKey: ['cases'] })
     },
     onError: (err) => {
-      mutateError('Delete', err, `capture-delete-${pendingDelete?.id ?? ''}`)
+      mutateError(t('capture.delete.action'), err, `capture-delete-${pendingDelete?.id ?? ''}`)
     },
   })
 
@@ -112,18 +112,18 @@ export function CapturePage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Capture</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        Upload a PCAP/PCAPNG, start a background analysis, and watch the pipeline work.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('capture.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('capture.subtitle')}</p>
 
       {/* Upload zone */}
       <div className="rounded-xl border border-dashed border-border-strong bg-surface-2/50 p-8">
         <div className="flex flex-col items-center gap-3">
-          <div className="text-3xl font-light text-fg-subtle">PCAP</div>
+          <div className="text-3xl font-light text-fg-subtle">{t('capture.pcap_label')}</div>
           <p className="text-sm text-fg-muted">
-            Drop or select a capture file (<span className="text-fg-muted">.pcap</span>,{' '}
-            <span className="text-fg-muted">.pcapng</span>)
+            {t('capture.drop_zone', {
+              ext: '.pcap',
+            })}{' '}
+            <span className="text-fg-muted">.pcapng</span>
           </p>
           <input
             ref={fileRef}
@@ -141,7 +141,7 @@ export function CapturePage() {
             onClick={() => fileRef.current?.click()}
             className="rounded-lg bg-accent/10 px-5 py-2 text-sm font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20 disabled:opacity-50"
           >
-            {upload.isPending ? 'Uploading…' : 'Select PCAP file'}
+            {upload.isPending ? t('capture.uploading') : t('capture.select_file')}
           </button>
           {uploadError && <p className="text-sm text-danger">{uploadError}</p>}
         </div>
@@ -149,7 +149,7 @@ export function CapturePage() {
 
       {/* Parser selection */}
       <div className="mt-6 flex items-center gap-3 text-sm">
-        <span className="text-fg-subtle">Parser:</span>
+        <span className="text-fg-subtle">{t('capture.parser')}</span>
         {['', 'scapy', 'tshark']
           .filter((p) => p !== 'tshark' || parsers?.tshark)
           .map((p) => (
@@ -161,14 +161,19 @@ export function CapturePage() {
                   ? 'bg-accent/10 text-accent ring-accent/30'
                   : 'text-fg-muted ring-border-strong hover:text-fg'
               }`}
-              title={p === '' ? 'Automatic (Scapy default)' : `${p} parser`}
+              title={p === '' ? t('capture.parser.title') : t('capture.parser.title_named', { name: p })}
             >
-              {p === '' ? 'Auto' : p}
+              {p === '' ? t('capture.parser.auto') : p}
             </button>
           ))}
         {parsers && (
           <span className="ml-2 text-xs text-fg-subtle">
-            available: {Object.entries(parsers).filter(([, v]) => v).map(([k]) => k).join(', ')}
+            {t('capture.parser.available', {
+              list: Object.entries(parsers)
+                .filter(([, v]) => v)
+                .map(([k]) => k)
+                .join(', '),
+            })}
           </span>
         )}
       </div>
@@ -183,8 +188,8 @@ export function CapturePage() {
               <div className="font-medium text-fg">{current.filename}</div>
               <div className="mt-0.5 text-xs text-fg-subtle">
                 {formatBytes(current.size_bytes ?? 0)} ·{' '}
-                {(current.packet_count ?? 0).toLocaleString()} packets
-                {current.parser_used && ` · parsed by ${current.parser_used}`}
+                {t('capture.detail.packets', { count: current.packet_count ?? 0 })}
+                {current.parser_used && t('capture.detail.parsed_by', { parser: current.parser_used })}
               </div>
             </div>
             <StatusPill status={current.status} />
@@ -193,8 +198,8 @@ export function CapturePage() {
                 // `current` may be the synthesized analyzing object; the button
                 // is disabled exactly then, so the modal only ever gets a full row
                 onClick={() => setPendingDelete(current as Capture)}
-                aria-label={`Delete capture ${current.filename}`}
-                title="Delete this capture and its analysis data"
+                aria-label={t('capture.detail.delete_aria', { name: current.filename })}
+                title={t('capture.detail.delete_title')}
                 disabled={current.status === 'queued' || current.status === 'analyzing'}
                 className="rounded-lg p-1.5 text-fg-subtle transition hover:bg-danger/10 hover:text-danger disabled:opacity-40"
               >
@@ -207,11 +212,11 @@ export function CapturePage() {
                 onClick={() => analyze.mutate(current.id)}
                 className="rounded-lg bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent ring-1 ring-accent/30 hover:bg-accent/20 disabled:opacity-50"
               >
-                {analyze.isPending ? 'Starting…' : 'Analyze'}
+                {analyze.isPending ? t('capture.detail.starting') : t('capture.detail.analyze')}
               </button>
             )}
             {(current.status === 'analyzing' || current.status === 'queued') && (
-              <span className="text-sm text-warning">Analysis running…</span>
+              <span className="text-sm text-warning">{t('capture.detail.analysis_running')}</span>
             )}
           </div>
 
@@ -223,8 +228,8 @@ export function CapturePage() {
                   {liveJob?.status === 'running' && liveJob.stage
                     ? liveJob.stage
                     : current.status === 'queued'
-                      ? 'Queued'
-                      : 'Working…'}
+                      ? t('capture.detail.queued')
+                      : t('capture.detail.working')}
                 </span>
                 <span>{current.analysis_progress}%</span>
               </div>
@@ -245,17 +250,17 @@ export function CapturePage() {
           {current.status === 'completed' && (
             <div className="space-y-4 px-5 py-4">
               <div className="grid grid-cols-4 gap-4 text-sm">
-                <SummaryStat label="Packets" value={current.packet_count.toLocaleString()} />
+                <SummaryStat label={t('capture.summary.packets')} value={current.packet_count.toLocaleString()} />
                 <SummaryStat
-                  label="Source IPs"
+                  label={t('capture.summary.source_ips')}
                   value={current.summary.unique_source_ips ?? 0}
                 />
                 <SummaryStat
-                  label="Destination IPs"
+                  label={t('capture.summary.destination_ips')}
                   value={current.summary.unique_destination_ips ?? 0}
                 />
                 <SummaryStat
-                  label="Protocols"
+                  label={t('capture.summary.protocols')}
                   value={Object.keys(current.summary.protocol_counts ?? {}).length}
                 />
               </div>
@@ -263,7 +268,7 @@ export function CapturePage() {
               {protocolRows.length > 0 && (
                 <div>
                   <div className="mb-2 text-xs uppercase tracking-wider text-fg-subtle">
-                    Protocol distribution
+                    {t('capture.summary.protocol_distribution')}
                   </div>
                   <div className="space-y-1.5">
                     {protocolRows.map((p) => (
@@ -285,7 +290,7 @@ export function CapturePage() {
               {(current.summary.top_talkers?.length ?? 0) > 0 && (
                 <div>
                   <div className="mb-2 text-xs uppercase tracking-wider text-fg-subtle">
-                    Top talkers
+                    {t('capture.summary.top_talkers')}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {current.summary.top_talkers!.slice(0, 6).map((t) => (
@@ -309,7 +314,7 @@ export function CapturePage() {
       {captures && captures.length > 0 && (
         <div className="mt-6 rounded-xl border border-border bg-surface-2/50">
           <div className="border-b border-border px-4 py-3 text-sm font-medium text-fg-muted">
-            All captures
+            {t('capture.all_captures')}
           </div>
           <div className="divide-y divide-border/60">
             {captures.map((c) => (
@@ -332,8 +337,8 @@ export function CapturePage() {
                 {isAdmin && (
                   <button
                     onClick={() => setPendingDelete(c)}
-                    aria-label={`Delete capture ${c.filename}`}
-                    title="Delete this capture and its analysis data"
+                    aria-label={t('capture.detail.delete_aria', { name: c.filename })}
+                    title={t('capture.detail.delete_title')}
                     className="rounded-lg p-1.5 text-fg-subtle opacity-0 transition hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
                   >
                     <Trash2 size={14} aria-hidden />
@@ -348,7 +353,7 @@ export function CapturePage() {
       {/* Deletion confirmation */}
       {pendingDelete && (
         <Modal
-          title="Delete capture"
+          title={t('capture.delete.title')}
           subtitle={pendingDelete.filename}
           onClose={() => {
             if (!deleteCapture.isPending) setPendingDelete(null)
@@ -356,26 +361,26 @@ export function CapturePage() {
         >
           <div className="px-5 py-4">
             <p className="text-sm text-fg">
-              This permanently deletes <b>{pendingDelete.filename}</b> (
-              {formatBytes(pendingDelete.size_bytes ?? 0)}), its stored PCAP file, and all
-              analysis data — flows, hosts, DNS/HTTP/TLS, alerts, timeline, evidence graph,
-              and jobs.
+              {t('capture.delete.confirm', {
+                name: pendingDelete.filename,
+                size: formatBytes(pendingDelete.size_bytes ?? 0),
+              })}
             </p>
-            <p className="mt-2 text-sm font-medium text-danger">This cannot be undone.</p>
+            <p className="mt-2 text-sm font-medium text-danger">{t('capture.delete.irreversible')}</p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setPendingDelete(null)}
                 disabled={deleteCapture.isPending}
                 className="rounded-lg px-4 py-2 text-sm text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:opacity-50"
               >
-                Cancel
+                {t('capture.delete.cancel')}
               </button>
               <button
                 onClick={() => deleteCapture.mutate(pendingDelete.id)}
                 disabled={deleteCapture.isPending}
                 className="rounded-lg bg-danger/10 px-4 py-2 text-sm font-medium text-danger ring-1 ring-danger/30 transition hover:bg-danger/20 disabled:opacity-50"
               >
-                {deleteCapture.isPending ? 'Deleting…' : 'Delete permanently'}
+                {deleteCapture.isPending ? t('capture.delete.deleting') : t('capture.delete.permanently')}
               </button>
             </div>
           </div>
@@ -396,6 +401,7 @@ function SummaryStat({ label, value }: { label: string; value: string | number }
 
 function LiveCapturePanel() {
   const queryClient = useQueryClient()
+  const t = useT()
   const [iface, setIface] = useState('')
   const [bpf, setBpf] = useState('')
   const [duration, setDuration] = useState(60)
@@ -426,11 +432,11 @@ function LiveCapturePanel() {
     onSuccess: (_status) => {
       setLiveError(null)
       queryClient.invalidateQueries({ queryKey: ['liveStatus'] })
-      mutateSuccess('Live capture started')
+      mutateSuccess(t('live.started'))
     },
     onError: (err) => {
       setLiveError(err.message)
-      mutateError('Starting live capture', err, 'live-start')
+      mutateError(t('live.start.action'), err, 'live-start')
     },
   })
 
@@ -439,11 +445,11 @@ function LiveCapturePanel() {
     onSuccess: ({ capture }) => {
       queryClient.invalidateQueries({ queryKey: ['liveStatus'] })
       queryClient.invalidateQueries({ queryKey: ['captures'] })
-      mutateSuccess(`Live capture stopped — ${capture.filename} queued for analysis`)
+      mutateSuccess(t('live.stopped_toast', { filename: capture.filename }))
     },
     onError: (err) => {
       setLiveError(err.message)
-      mutateError('Stopping live capture', err, 'live-stop')
+      mutateError(t('live.stop.action'), err, 'live-stop')
     },
   })
 
@@ -456,16 +462,16 @@ function LiveCapturePanel() {
       <div className="mb-3 flex items-center gap-3">
         <span className="h-2 w-2 rounded-full bg-info"></span>
         <div className="flex-1">
-          <div className="text-sm font-medium text-fg">Live capture</div>
-          <div className="text-xs text-fg-subtle">
-            Record traffic from a network interface, then analyze it like an upload
-          </div>
+          <div className="text-sm font-medium text-fg">{t('live.title')}</div>
+          <div className="text-xs text-fg-subtle">{t('live.subtitle')}</div>
         </div>
         {running && (
           <span className="flex items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accent ring-1 ring-accent/30">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            recording · {live?.packet_count.toLocaleString()} packets ·{' '}
-            {live?.elapsed_seconds.toFixed(0)}s
+            {t('live.recording', {
+              packets: live?.packet_count.toLocaleString(),
+              seconds: live?.elapsed_seconds.toFixed(0),
+            })}
           </span>
         )}
       </div>
@@ -473,7 +479,7 @@ function LiveCapturePanel() {
       {!running ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <select
-            aria-label="Network interface"
+            aria-label={t('live.network_interface')}
             value={effectiveIface}
             onChange={(e) => setIface(e.target.value)}
             className="rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg"
@@ -487,12 +493,12 @@ function LiveCapturePanel() {
           <input
             value={bpf}
             onChange={(e) => setBpf(e.target.value)}
-            placeholder="BPF filter (optional) — e.g. tcp port 80"
-            aria-label="BPF filter"
+            placeholder={t('live.bpf_placeholder')}
+            aria-label={t('live.bpf_label')}
             className="w-72 rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg placeholder-fg-subtle focus:border-info/50 focus:outline-none"
           />
           <select
-            aria-label="Duration"
+            aria-label={t('live.duration')}
             value={duration}
             onChange={(e) => setDuration(Number(e.target.value))}
             className="rounded-lg border border-border-strong bg-surface-2/50 px-3 py-1.5 text-fg"
@@ -508,11 +514,11 @@ function LiveCapturePanel() {
             onClick={() => start.mutate()}
             className="rounded-lg bg-info/10 px-4 py-1.5 text-sm font-medium text-info ring-1 ring-info/30 transition hover:bg-info/20 disabled:opacity-50"
           >
-            {start.isPending ? 'Starting…' : 'Start live capture'}
+            {start.isPending ? t('capture.detail.starting') : t('live.start')}
           </button>
           {live?.status === 'stopped' && (
             <span className="text-xs text-accent">
-              stopped · {live.packet_count.toLocaleString()} packets captured
+              {t('live.stopped', { packets: live.packet_count.toLocaleString() })}
             </span>
           )}
         </div>
@@ -520,15 +526,15 @@ function LiveCapturePanel() {
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="font-mono text-xs text-fg-muted">
             {live?.interface}
-            {live?.bpf ? ` · filter: ${live.bpf}` : ''} · auto-stop in{' '}
-            {Math.max(0, (live?.max_seconds ?? 0) - (live?.elapsed_seconds ?? 0)).toFixed(0)}s
+            {live?.bpf ? t('live.filter', { filter: live.bpf }) : ''}
+            {t('live.auto_stop', { seconds: Math.max(0, (live?.max_seconds ?? 0) - (live?.elapsed_seconds ?? 0)).toFixed(0) })}
           </span>
           <button
             disabled={stop.isPending}
             onClick={() => stop.mutate()}
             className="rounded-lg bg-danger/10 px-4 py-1.5 text-sm font-medium text-danger ring-1 ring-danger/30 transition hover:bg-danger/20 disabled:opacity-50"
           >
-            {stop.isPending ? 'Stopping…' : 'Stop & analyze'}
+            {stop.isPending ? t('live.stopping') : t('live.stop_analyze')}
           </button>
         </div>
       )}

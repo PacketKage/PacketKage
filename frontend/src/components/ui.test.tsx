@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { Badge, Button, Spinner, StatusPill } from './ui'
+import { Badge, Button, Spinner, StatusPill, formatBytes, formatDuration, formatTime } from './ui'
 import { useTheme } from '../hooks/theme'
 
 // jsdom render cleanup between tests
@@ -42,6 +42,46 @@ describe('Spinner', () => {
   it('spinner is announced to screen readers', () => {
     render(<Spinner />)
     expect(screen.getByRole('status')).toBeDefined()
+  })
+})
+
+describe('Locale-aware formatters', () => {
+  it('formatBytes uses B/KB/MB/GB for en', () => {
+    expect(formatBytes(0, 'en')).toBe('0 B')
+    expect(formatBytes(1024, 'en')).toBe('1.0 KB')
+    expect(formatBytes(5 * 1024 * 1024, 'en')).toBe('5.0 MB')
+  })
+
+  it('formatBytes uses o/Ko/Mo/Go for fr', () => {
+    expect(formatBytes(0, 'fr')).toBe('0 o')
+    expect(formatBytes(1024, 'fr')).toBe('1.0 Ko')
+    expect(formatBytes(5 * 1024 * 1024, 'fr')).toBe('5.0 Mo')
+  })
+
+  it('formatDuration localizes the minute marker', () => {
+    const start = 1_700_000_000
+    expect(formatDuration(start, start + 45, 'en')).toBe('45.0s')
+    expect(formatDuration(start, start + 90, 'en')).toBe('1m 30s')
+    expect(formatDuration(start, start + 90, 'fr')).toBe('1 min 30s')
+  })
+
+  it('formatTime uses the requested locale', () => {
+    const ts = 1_700_000_000
+    const en = formatTime(ts, 'en')
+    const fr = formatTime(ts, 'fr')
+    expect(typeof en).toBe('string')
+    expect(typeof fr).toBe('string')
+    // The separator localization differs; just assert both render the hour.
+    expect(en).not.toBe('—')
+    expect(fr).not.toBe('—')
+  })
+
+  it('formatBytes falls back to the module-level current locale', async () => {
+    const { setCurrentLocale } = await import('../i18n/locale')
+    setCurrentLocale('fr')
+    expect(formatBytes(0)).toBe('0 o')
+    setCurrentLocale('en')
+    expect(formatBytes(0)).toBe('0 B')
   })
 })
 

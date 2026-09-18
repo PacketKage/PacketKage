@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthContext, type AuthContextValue } from '../auth/AuthContext'
+import { LocaleContext, type LocaleContextValue } from '../i18n/LocaleContext'
 import type { AuthUser } from '../types/api'
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +75,8 @@ export function TestAuthProvider({
  *     queries: [{ queryKey: ['captures'], data: [captureFixture()] }],
  *   })
  */
+const EN_LOCALE: LocaleContextValue = { locale: 'en', setLocale: () => {} }
+
 export function renderPage(
   ui: ReactElement,
   opts: {
@@ -81,6 +84,7 @@ export function renderPage(
     path?: string
     queries?: { queryKey: unknown[]; data: unknown }[]
     auth?: AuthContextValue
+    locale?: LocaleContextValue
   } = {},
 ) {
   const queryClient = new QueryClient({
@@ -93,12 +97,14 @@ export function renderPage(
   }
   const tree = (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={opts.initialEntries ?? ['/']}>
-        <Routes>
-          <Route path={opts.path ?? '/'} element={ui} />
-          <Route path="*" element={ui} />
-        </Routes>
-      </MemoryRouter>
+      <LocaleContext.Provider value={opts.locale ?? EN_LOCALE}>
+        <MemoryRouter initialEntries={opts.initialEntries ?? ['/']}>
+          <Routes>
+            <Route path={opts.path ?? '/'} element={ui} />
+            <Route path="*" element={ui} />
+          </Routes>
+        </MemoryRouter>
+      </LocaleContext.Provider>
     </QueryClientProvider>
   )
   return render(opts.auth ? <TestAuthProvider value={opts.auth}>{tree}</TestAuthProvider> : tree)

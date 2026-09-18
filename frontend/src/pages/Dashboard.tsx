@@ -9,11 +9,13 @@ import {
   formatDuration,
 } from '../components/ui'
 import { useCaptures } from '../hooks/captures'
+import { useT } from '../i18n/LocaleContext'
 import type { Capture } from '../types/api'
 
 export function Dashboard() {
   const navigate = useNavigate()
   const { data: captures, isLoading } = useCaptures()
+  const t = useT()
 
   const { data: jobs } = useQuery({
     queryKey: ['jobs'],
@@ -37,16 +39,14 @@ export function Dashboard() {
     <div className="p-8">
       <div className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-fg">Dashboard</h1>
-          <p className="mt-1 text-sm text-fg-subtle">
-            Capture, analysis, and detection activity across the environment.
-          </p>
+          <h1 className="text-2xl font-semibold text-fg">{t('dashboard.title')}</h1>
+          <p className="mt-1 text-sm text-fg-subtle">{t('dashboard.subtitle')}</p>
         </div>
         <Link
           to="/capture"
           className="rounded-lg bg-accent/10 px-4 py-2 text-sm font-medium text-accent ring-1 ring-accent/30 transition hover:bg-accent/20"
         >
-          + Upload PCAP
+          {t('dashboard.upload_pcap')}
         </Link>
       </div>
 
@@ -59,11 +59,11 @@ export function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-          <StatCard label="Captures" value={captures?.length ?? 0} />
-          <StatCard label="Analyzed" value={completed.length} tone="emerald" />
-          <StatCard label="Total Packets" value={totalPackets.toLocaleString()} />
+          <StatCard label={t('dashboard.stat.captures')} value={captures?.length ?? 0} />
+          <StatCard label={t('dashboard.stat.analyzed')} value={completed.length} tone="emerald" />
+          <StatCard label={t('dashboard.stat.total_packets')} value={totalPackets.toLocaleString()} />
           <StatCard
-            label="Active Jobs"
+            label={t('dashboard.stat.active_jobs')}
             value={activeJobs.length}
             tone={activeJobs.length > 0 ? 'amber' : undefined}
           />
@@ -75,7 +75,7 @@ export function Dashboard() {
         <div className="mt-6 rounded-xl border border-warning/20 bg-warning/5 p-4">
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium text-warning">
-              Analysis in progress — {activeJob.stage}
+              {t('dashboard.analysis_in_progress', { stage: activeJob.stage })}
             </span>
             <span className="text-warning">{activeJob.progress}%</span>
           </div>
@@ -95,21 +95,21 @@ export function Dashboard() {
       {/* Flow summary (Step 2) */}
       {lastFlowSummary && (
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <FlowStat label="Flows" value={lastFlowSummary.flow_count ?? 0} />
+          <FlowStat label={t('dashboard.flow.flows')} value={lastFlowSummary.flow_count ?? 0} />
           <FlowStat label="TCP" value={lastFlowSummary.tcp_flows ?? 0} />
           <FlowStat label="UDP" value={lastFlowSummary.udp_flows ?? 0} />
           <FlowStat
-            label="Failed"
+            label={t('dashboard.flow.failed')}
             value={lastFlowSummary.failed_flows ?? 0}
             tone="red"
           />
           <FlowStat
-            label="Resets"
+            label={t('dashboard.flow.resets')}
             value={lastFlowSummary.reset_flows ?? 0}
             tone="red"
           />
           <FlowStat
-            label="Retransmitting"
+            label={t('dashboard.flow.retransmitting')}
             value={lastFlowSummary.retransmitting_flows ?? 0}
             tone="amber"
           />
@@ -124,8 +124,7 @@ export function Dashboard() {
         >
           <div className="flex-1">
             <div className="text-sm font-medium text-danger">
-              {alertSummary.total} alert{alertSummary.total > 1 ? 's' : ''} — max risk score{' '}
-              {alertSummary.max_score}
+              {t('dashboard.alert_summary', { count: alertSummary.total, max: alertSummary.max_score })}
             </div>
             <div className="mt-1 flex gap-2 text-xs">
               {Object.entries(alertSummary.by_severity)
@@ -137,19 +136,27 @@ export function Dashboard() {
                 ))}
             </div>
           </div>
-          <span className="text-xs text-danger">view alerts →</span>
+          <span className="text-xs text-danger">{t('dashboard.view_alerts')}</span>
         </button>
       )}
 
       {/* Captures table */}
       <div className="mt-6 overflow-hidden rounded-xl border border-border bg-surface-2/50">
         <div className="border-b border-border px-4 py-3 text-sm font-medium text-fg">
-          Recent Captures
+          {t('dashboard.recent_captures')}
         </div>
         {isLoading ? (
           <div className="p-4">
             <SkeletonTable
-              headers={['File', 'Status', 'Packets', 'Size', 'Duration', 'Parser', 'Progress']}
+              headers={[
+                t('dashboard.table.file'),
+                t('dashboard.table.status'),
+                t('dashboard.table.packets'),
+                t('dashboard.table.size'),
+                t('dashboard.table.duration'),
+                t('dashboard.table.parser'),
+                t('dashboard.table.progress'),
+              ]}
               widths={['w-40', 'w-20', 'w-16', 'w-16', 'w-16', 'w-16', 'w-24']}
               rows={5}
               className="border-0"
@@ -161,13 +168,13 @@ export function Dashboard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-fg-subtle">
-                <th className="px-4 py-2.5">File</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5">Packets</th>
-                <th className="px-4 py-2.5">Size</th>
-                <th className="px-4 py-2.5">Duration</th>
-                <th className="px-4 py-2.5">Parser</th>
-                <th className="px-4 py-2.5">Progress</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.file')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.status')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.packets')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.size')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.duration')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.parser')}</th>
+                <th className="px-4 py-2.5">{t('dashboard.table.progress')}</th>
               </tr>
             </thead>
             <tbody>
@@ -209,6 +216,19 @@ function CaptureRow({ capture }: { capture: Capture }) {
   )
 }
 
+const TONE_TEXT: Record<string, string> = {
+  red: 'text-danger',
+  amber: 'text-warning',
+  emerald: 'text-fg',
+  default: 'text-fg',
+}
+
+const TONE_DOT: Record<string, string> = {
+  emerald: 'bg-success',
+  amber: 'bg-warning',
+  default: 'bg-info',
+}
+
 function FlowStat({
   label,
   value,
@@ -223,11 +243,7 @@ function FlowStat({
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-wider text-fg-subtle">{label}</span>
       </div>
-      <div
-        className={`mt-1 text-xl font-semibold tabular-nums ${
-          tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-warning' : 'text-fg'
-        }`}
-      >
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${TONE_TEXT[tone ?? 'default']}`}>
         {value.toLocaleString()}
       </div>
     </div>
@@ -247,11 +263,7 @@ function StatCard({
     <div className="rounded-xl border border-border bg-surface-2/50 p-4">
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-wider text-fg-subtle">{label}</span>
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${
-            tone === 'emerald' ? 'bg-success' : tone === 'amber' ? 'bg-warning' : 'bg-info'
-          }`}
-        />
+        <span className={`h-1.5 w-1.5 rounded-full ${TONE_DOT[tone ?? 'default']}`} />
       </div>
       <div className="mt-2 text-2xl font-semibold tabular-nums text-fg">{value}</div>
     </div>
@@ -259,15 +271,16 @@ function StatCard({
 }
 
 function EmptyState() {
+  const t = useT()
   return (
     <div className="flex flex-col items-center gap-3 p-12">
       <div className="h-10 w-10 rounded-full border-2 border-dashed border-border-strong" />
-      <p className="text-sm text-fg-subtle">No captures yet.</p>
+      <p className="text-sm text-fg-subtle">{t('dashboard.empty.title')}</p>
       <Link
         to="/capture"
         className="rounded-lg bg-accent/10 px-4 py-2 text-sm text-accent ring-1 ring-accent/30 hover:bg-accent/20"
       >
-        Upload your first PCAP
+        {t('dashboard.empty.upload')}
       </Link>
     </div>
   )

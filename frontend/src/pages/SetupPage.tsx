@@ -6,6 +6,9 @@ import { api, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Logo } from '../components/Logo'
 import { Button, Spinner } from '../components/ui'
+import { translate } from '../i18n/locale'
+import { LocaleProvider } from '../i18n/LocaleContext'
+import { LanguageToggle } from '../components/LanguageToggle'
 import type { SetupTestResult, SetupValues } from '../types/api'
 
 /**
@@ -37,55 +40,63 @@ const EMPTY: SetupValues = {
 
 interface FieldSpec {
   name: keyof SetupValues
-  label: string
-  placeholder?: string
-  help?: string
+  labelKey: string
+  placeholderKey?: string
+  helpKey?: string
   type?: 'text' | 'password'
 }
 
 const FIELDS: FieldSpec[] = [
   {
     name: 'oidc_issuer',
-    label: 'Issuer URL',
-    placeholder: 'https://authentik.example.com/application/o/packetkage/',
-    help: 'The OIDC discovery issuer; /.well-known/openid-configuration is resolved from it.',
+    labelKey: 'setup.field.issuer',
+    placeholderKey: 'setup.field.issuer_placeholder',
+    helpKey: 'setup.field.issuer_help',
   },
-  { name: 'oidc_client_id', label: 'Client ID' },
+  { name: 'oidc_client_id', labelKey: 'setup.field.client_id' },
   {
     name: 'oidc_client_secret',
-    label: 'Client secret',
+    labelKey: 'setup.field.client_secret',
     type: 'password',
-    help: 'Stored on the data volume with owner-only permissions and never returned by the API.',
+    helpKey: 'setup.field.client_secret_help',
   },
   {
     name: 'oidc_redirect_uri',
-    label: 'Redirect URI',
-    placeholder: 'https://packetkage.example.com/api/auth/callback',
-    help: 'Must be registered verbatim on the provider. Derived from the public URL when left blank.',
+    labelKey: 'setup.field.redirect_uri',
+    placeholderKey: 'setup.field.redirect_uri_placeholder',
+    helpKey: 'setup.field.redirect_uri_help',
   },
   {
     name: 'public_url',
-    label: 'Public URL',
-    placeholder: 'https://packetkage.example.com',
-    help: 'External address of PacketKage, used to derive the redirect URI when it is unset.',
+    labelKey: 'setup.field.public_url',
+    placeholderKey: 'setup.field.public_url_placeholder',
+    helpKey: 'setup.field.public_url_help',
   },
-  { name: 'oidc_scope', label: 'Scope', placeholder: 'openid profile email' },
-  { name: 'oidc_groups_claim', label: 'Groups claim', placeholder: 'groups' },
+  { name: 'oidc_scope', labelKey: 'setup.field.scope', placeholderKey: 'setup.field.scope_placeholder' },
+  { name: 'oidc_groups_claim', labelKey: 'setup.field.groups_claim', placeholderKey: 'setup.field.groups_claim_placeholder' },
   {
     name: 'admin_group',
-    label: 'Admin group',
-    placeholder: 'packetkage-admin',
-    help: 'Members of this IdP group get full access, including deletes.',
+    labelKey: 'setup.field.admin_group',
+    placeholderKey: 'setup.field.admin_group_placeholder',
+    helpKey: 'setup.field.admin_group_help',
   },
   {
     name: 'analyst_group',
-    label: 'Analyst group',
-    placeholder: 'packetkage-analyst',
-    help: 'Members of this IdP group can read, analyze and investigate.',
+    labelKey: 'setup.field.analyst_group',
+    placeholderKey: 'setup.field.analyst_group_placeholder',
+    helpKey: 'setup.field.analyst_group_help',
   },
 ]
 
 export function SetupPage() {
+  return (
+    <LocaleProvider>
+      <SetupPageInner />
+    </LocaleProvider>
+  )
+}
+
+function SetupPageInner() {
   const { refresh } = useAuth()
   const navigate = useNavigate()
 
@@ -183,20 +194,20 @@ export function SetupPage() {
 
   if (needsToken && !ready) {
     return (
-      <Shell title="Connect an identity provider" subtitle="PacketKage is not configured yet.">
+      <Shell title={translate('setup.connect.title')} subtitle={translate('setup.connect.subtitle')}>
         <p className="text-sm leading-relaxed text-fg-muted">
-          This instance is reachable from a remote address, so the first-run wizard
-          needs the one-time bootstrap token. Find it in the backend startup logs or in
-          the file <code className="text-fg-subtle">setup-token</code> on the data volume.
+          {translate('setup.token_intro_pre')}{' '}
+          <code className="text-fg-subtle">setup-token</code>{' '}
+          {translate('setup.token_intro_post')}
         </p>
         <label className="mt-4 block text-sm">
-          <span className="text-fg-subtle">Bootstrap token</span>
+          <span className="text-fg-subtle">{translate('setup.token_label')}</span>
           <input
             type="password"
             value={token}
             onChange={(event) => setToken(event.target.value)}
             className={INPUT_CLASS}
-            placeholder="Paste the token from the container logs"
+            placeholder={translate('setup.token_placeholder')}
             autoComplete="off"
           />
         </label>
@@ -210,7 +221,7 @@ export function SetupPage() {
           onClick={() => void loadConfig(token)}
         >
           <KeyRound size={16} aria-hidden />
-          Continue
+          {translate('setup.continue')}
         </Button>
       </Shell>
     )
@@ -225,10 +236,9 @@ export function SetupPage() {
   }
 
   return (
-    <Shell title="Connect an identity provider" subtitle="PacketKage is not configured yet.">
+    <Shell title={translate('setup.connect.title')} subtitle={translate('setup.connect.subtitle')}>
       <p className="text-sm leading-relaxed text-fg-muted">
-        PacketKage authenticates exclusively through OIDC (Authorization-Code + PKCE).
-        Point it at your provider — for example self-hosted Authentik — to enable access.
+        {translate('setup.oidc_intro')}
       </p>
 
       <form
@@ -244,10 +254,10 @@ export function SetupPage() {
           return (
             <label key={field.name} className="block text-sm">
               <span className="flex items-center gap-2 text-fg-subtle">
-                {field.label}
+                {translate(field.labelKey)}
                 {locked && (
                   <span className="rounded bg-fg/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fg-muted">
-                    set by environment
+                    {translate('setup.env_set')}
                   </span>
                 )}
               </span>
@@ -257,17 +267,21 @@ export function SetupPage() {
                 onChange={update(field.name)}
                 placeholder={
                   locked
-                    ? 'Managed by environment'
+                    ? translate('setup.managed_env')
                     : isSecret && secretSet
-                      ? 'Leave blank to keep the saved secret'
-                      : field.placeholder
+                      ? translate('setup.keep_secret')
+                      : field.placeholderKey
+                        ? translate(field.placeholderKey)
+                        : ''
                 }
                 disabled={locked}
                 autoComplete="off"
                 spellCheck={false}
                 className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
               />
-              {field.help && <span className="mt-1 block text-xs text-fg-subtle">{field.help}</span>}
+              {field.helpKey && (
+                <span className="mt-1 block text-xs text-fg-subtle">{translate(field.helpKey)}</span>
+              )}
             </label>
           )
         })}
@@ -277,11 +291,11 @@ export function SetupPage() {
 
         <div className="flex flex-wrap gap-3 pt-1">
           <Button type="button" onClick={() => void submitTest()} loading={testing}>
-            Test connection
+            {translate('setup.test_connection')}
           </Button>
           <Button type="submit" variant="primary" loading={saving}>
             <ShieldCheck size={16} aria-hidden />
-            Save &amp; enable
+            {translate('setup.save_enable')}
           </Button>
         </div>
       </form>
@@ -305,12 +319,15 @@ function Shell({
   return (
     <div className="flex min-h-[70vh] items-center justify-center p-6">
       <div className="w-full max-w-xl rounded-xl border border-border bg-surface-2/50 p-8">
-        <div className="flex items-center gap-3">
-          <Logo size={36} withWordmark={false} />
-          <div>
-            <h1 className="text-lg font-semibold text-fg">{title}</h1>
-            <p className="text-sm text-fg-muted">{subtitle}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Logo size={36} withWordmark={false} />
+            <div>
+              <h1 className="text-lg font-semibold text-fg">{title}</h1>
+              <p className="text-sm text-fg-muted">{subtitle}</p>
+            </div>
           </div>
+          <LanguageToggle />
         </div>
         <div className="mt-5">{children}</div>
       </div>
@@ -333,7 +350,10 @@ function TestNote({ result }: { result: SetupTestResult }) {
       <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-fg-muted">
         <XCircle size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
         <span className="leading-relaxed">
-          Discovery failed{result.stage ? ` (${result.stage})` : ''}: {result.detail}
+          {translate('setup.test.discovery_failed', {
+            stage: result.stage ? ` (${result.stage})` : '',
+            detail: result.detail,
+          })}
         </span>
       </div>
     )
@@ -342,8 +362,7 @@ function TestNote({ result }: { result: SetupTestResult }) {
     <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/5 p-3 text-sm text-fg-muted">
       <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-success" aria-hidden />
       <span className="leading-relaxed">
-        Connected to <span className="font-mono text-xs text-fg">{result.issuer}</span>. The
-        discovery document and signing keys were fetched successfully.
+        {translate('setup.test.connected', { issuer: result.issuer })}
       </span>
     </div>
   )

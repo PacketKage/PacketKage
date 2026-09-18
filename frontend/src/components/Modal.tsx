@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useT } from '../i18n/LocaleContext'
 
 /** Shared modal shell: backdrop, Escape to close, stopPropagation, focus trap. */
 export function Modal({
@@ -21,6 +22,7 @@ export function Modal({
   // fresh inline arrow — e.g. while a background query polls
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
+  const t = useT()
 
   // focus-in on mount only; restore focus on unmount
   useEffect(() => {
@@ -83,7 +85,7 @@ export function Modal({
             <div className="font-medium text-fg">{title}</div>
             {subtitle && <div className="mt-0.5 text-xs text-fg-subtle">{subtitle}</div>}
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-fg-subtle hover:text-fg-muted">
+          <button onClick={onClose} aria-label={t('modal.close')} className="text-fg-subtle hover:text-fg-muted">
             <X size={18} aria-hidden />
           </button>
         </div>

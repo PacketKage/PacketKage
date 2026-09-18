@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,13 +144,34 @@ def health():
 # In local dev the folder doesn't exist and Vite serves the frontend instead.
 
 
+def safe_spa_file(spa_dir: Path, full_path: str) -> Path | None:
+    """Safely resolve an asset path inside spa_dir, defending against traversal."""
+    if not full_path or "\0" in full_path or any(ord(c) < 32 for c in full_path):
+        return None
+    import unicodedata
+
+    # Unicode normalization (NFKC) to collapse fullwidth/homoglyph dots and slashes
+    normalized = unicodedata.normalize("NFKC", full_path).replace("\\", "/")
+    segments = normalized.split("/")
+    if any(s in ("..", ".") or not s for s in segments):
+        return None
+    resolved_root = spa_dir.resolve()
+    try:
+        candidate = (resolved_root / Path(*segments)).resolve()
+        if candidate.is_file() and candidate.is_relative_to(resolved_root):
+            return candidate
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def _mount_spa() -> None:
     from pathlib import Path
 
     from fastapi.staticfiles import StaticFiles
     from starlette.responses import FileResponse
 
-    spa_dir = Path(__file__).resolve().parent / "dist"
+    spa_dir = (Path(__file__).resolve().parent / "dist").resolve()
     if not (spa_dir / "index.html").exists():
         return  # frontend not built into the image — API-only mode
 
@@ -159,20 +182,12 @@ def _mount_spa() -> None:
         # Unknown /api paths must 404 like the API would, not serve the SPA.
         if full_path == "api" or full_path.startswith("api/"):
             raise HTTPException(404, "Not found")
-        try:
-            candidate = (spa_dir / full_path).resolve()
-        except OSError:
-            candidate = None
-        if (
-            candidate is not None
-            and full_path
-            and candidate.is_file()
-            and candidate.is_relative_to(spa_dir.resolve())
-        ):
-            # Starlette's :path converter passes percent-decoded input —
-            # bound-check against spa_dir or /../ traversal reads arbitrary files.
-            return FileResponse(candidate)
+        file_candidate = safe_spa_file(spa_dir, full_path)
+        if file_candidate is not None:
+            return FileResponse(file_candidate)
         return FileResponse(spa_dir / "index.html")
 
 
 _mount_spa()
+
+

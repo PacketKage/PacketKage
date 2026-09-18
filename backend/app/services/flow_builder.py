@@ -9,50 +9,62 @@ so Flow -> related packets is a pure lookup, no re-parsing.
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 
 from app.core.models import NormalizedPacket
 
-PRIVATE_V4_PREFIXES = (
-    "10.",
-    "192.168.",
-    "172.16.",
-    "172.17.",
-    "172.18.",
-    "172.19.",
-    "172.20.",
-    "172.21.",
-    "172.22.",
-    "172.23.",
-    "172.24.",
-    "172.25.",
-    "172.26.",
-    "172.27.",
-    "172.28.",
-    "172.29.",
-    "172.30.",
-    "172.31.",
+# IPv6 networks considered "internal" for traffic analysis purposes.
+# We intentionally avoid stdlib ``is_private`` which (since Python 3.11)
+# includes 2001:db8::/32 (documentation) and 100::/64 (discard), neither
+# of which represents a real internal network.
+_INTERNAL_V6_NETS = (
+    ipaddress.IPv6Network("::1/128"),        # loopback
+    ipaddress.IPv6Network("fc00::/7"),        # unique-local (ULA)
+    ipaddress.IPv6Network("fe80::/10"),       # link-local
 )
 
 
-def _is_private_v6(ip: str) -> bool:
-    low = ip.lower()
-    if low == "::1":
-        return True
-    # fc00::/7 — first hextet starts with fc or fd
-    first = low.split(":")[0]
-    if first.startswith(("fc", "fd")) and len(first) <= 4:
-        return True
-    # fe80::/10 — link-local
-    return first.startswith(("fe8", "fe9", "fea", "feb")) or low.startswith("fe80:") or low == "fe80::"
+def _is_internal_v6(addr: ipaddress.IPv6Address) -> bool:
+    """Return True when *addr* belongs to a non-routable / internal-network range."""
+    # IPv4-mapped addresses (::ffff:x.x.x.x) — delegate to the embedded v4 check.
+    mapped = addr.ipv4_mapped
+    if mapped is not None:
+        return mapped.is_loopback or mapped.is_private
+    return any(addr in net for net in _INTERNAL_V6_NETS)
+
+
+# RFC-1918 private IPv4 networks (excludes TEST-NET / documentation ranges)
+_INTERNAL_V4_NETS = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv4Network("127.0.0.0/8"),        # loopback
+    ipaddress.IPv4Network("169.254.0.0/16"),     # link-local
+    ipaddress.IPv4Network("100.64.0.0/10"),      # carrier-grade NAT
+)
 
 
 def is_private_ip(ip: str | None) -> bool:
+    """Return True when *ip* is a loopback, link-local, or RFC-1918 / ULA address.
+
+    Handles IPv4, IPv6, and IPv4-mapped IPv6 (``::ffff:10.0.0.1``)
+    addresses correctly.
+
+    Unlike stdlib ``is_private``, this EXCLUDES documentation ranges
+    (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) which are routable
+    public addresses reserved for examples.
+    """
     if not ip:
         return False
-    if ":" in ip:  # IPv6
-        return _is_private_v6(ip)
-    return ip.startswith(PRIVATE_V4_PREFIXES) or ip == "127.0.0.1" or ip == "::1"
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address):
+        return _is_internal_v6(addr)
+    # IPv4: check against RFC-1918 + loopback + link-local + CGNAT only
+    return any(addr in net for net in _INTERNAL_V4_NETS)
 
 
 @dataclass

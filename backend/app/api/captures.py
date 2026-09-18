@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import require_admin
 from app.core.config import settings
 from app.core.database import get_db
+from app.i18n import get_locale
 from app.parsers import ParserError, registry, resolve_parser
 from app.repositories import CaptureRepository, JobRepository
 from app.schemas.api import AnalyzeRequest, CaptureOut, JobOut
@@ -218,7 +219,11 @@ def list_parsers():
 
 
 @router.get("/{capture_id}/report")
-def capture_report(capture_id: str, db: Session = Depends(get_db)):
+def capture_report(
+    capture_id: str,
+    locale: str = Depends(get_locale),
+    db: Session = Depends(get_db),
+):
     """Download a self-contained HTML investigation report (printable to PDF)."""
     from fastapi.responses import HTMLResponse
 
@@ -231,7 +236,7 @@ def capture_report(capture_id: str, db: Session = Depends(get_db)):
         raise HTTPException(409, "Capture must be analyzed before a report can be generated")
 
     safe_name = _safe_header_name(capture.filename)
-    html_body = build_report(db, capture)
+    html_body = build_report(db, capture, locale)
     return HTMLResponse(
         content=html_body,
         headers={

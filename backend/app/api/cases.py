@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import require_admin
 from app.core.database import get_db
 from app.db.orm import CaptureModel, CaseModel
+from app.i18n import get_locale
+from app.i18n.localize import localize_incident
 from app.repositories import (
     AlertRepository,
     CaptureRepository,
@@ -39,7 +41,7 @@ def _case_or_404(db: Session, case_id: str):
     return case
 
 
-def _case_detail(db: Session, case: CaseModel) -> CaseDetailOut:
+def _case_detail(db: Session, case: CaseModel, locale: str = "en") -> CaseDetailOut:
     captures: list[CaptureModel] = []
     for cid in case.capture_ids or []:
         c = db.get(CaptureModel, cid)
@@ -49,6 +51,7 @@ def _case_detail(db: Session, case: CaseModel) -> CaseDetailOut:
     capture_ids = [c.id for c in captures]
     # incidents belong to the capture, not per-alert
     incidents = [inc for c in captures for inc in (c.summary or {}).get("incidents", [])]
+    incidents = [localize_incident(inc, locale) for inc in incidents]
     # dedupe incidents across captures (same source + rule set)
     seen: set[tuple] = set()
     deduped: list = []
@@ -86,19 +89,23 @@ def list_cases(limit: int = Query(default=100, ge=1, le=500), db: Session = Depe
 
 
 @router.post("", response_model=CaseDetailOut, status_code=201)
-def create_case(body: CaseCreate, db: Session = Depends(get_db)):
+def create_case(
+    body: CaseCreate, locale: str = Depends(get_locale), db: Session = Depends(get_db)
+):
     case = CaseRepository(db).create(name=body.name, description=body.description)
-    return _case_detail(db, case)
+    return _case_detail(db, case, locale)
 
 
 @router.get("/{case_id}", response_model=CaseDetailOut)
-def get_case(case_id: str, db: Session = Depends(get_db)):
+def get_case(case_id: str, locale: str = Depends(get_locale), db: Session = Depends(get_db)):
     case = _case_or_404(db, case_id)
-    return _case_detail(db, case)
+    return _case_detail(db, case, locale)
 
 
 @router.post("/{case_id}/captures", response_model=CaseDetailOut)
-def add_capture_to_case(case_id: str, body: CaseCaptureBody, db: Session = Depends(get_db)):
+def add_capture_to_case(
+    case_id: str, body: CaseCaptureBody, locale: str = Depends(get_locale), db: Session = Depends(get_db)
+):
     case = _case_or_404(db, case_id)
     capture = CaptureRepository(db).get(body.capture_id)
     if capture is None:
@@ -106,11 +113,13 @@ def add_capture_to_case(case_id: str, body: CaseCaptureBody, db: Session = Depen
     CaseRepository(db).add_capture(case, capture.id)
     # Rebuild evidence graph for this capture to add INCLUDES edge
     GraphEdgeRepository(db).rebuild_for_capture(capture.id, capture)
-    return _case_detail(db, case)
+    return _case_detail(db, case, locale)
 
 
 @router.delete("/{case_id}/captures/{capture_id}", response_model=CaseDetailOut)
-def remove_capture_from_case(case_id: str, capture_id: str, db: Session = Depends(get_db)):
+def remove_capture_from_case(
+    case_id: str, capture_id: str, locale: str = Depends(get_locale), db: Session = Depends(get_db)
+):
     case = _case_or_404(db, case_id)
     capture = db.get(CaptureModel, capture_id)
     if capture is None:
@@ -118,7 +127,7 @@ def remove_capture_from_case(case_id: str, capture_id: str, db: Session = Depend
     CaseRepository(db).remove_capture(case, capture_id)
     # Rebuild evidence graph for this capture to remove INCLUDES edge
     GraphEdgeRepository(db).rebuild_for_capture(capture.id, capture)
-    return _case_detail(db, case)
+    return _case_detail(db, case, locale)
 
 
 @router.post("/{case_id}/close", response_model=CaseOut)

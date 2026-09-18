@@ -8,11 +8,14 @@ import { EmptyState, ErrorState } from '../components/states'
 import { SkeletonRow, SkeletonStatus, formatBytes, formatTime } from '../components/ui'
 import { useSelectedCapture } from '../hooks/captures'
 import { useCsvExport } from '../hooks/useCsvExport'
+import { translate } from '../i18n/locale'
+import { useT } from '../i18n/LocaleContext'
 import { csvTime } from '../utils/csv'
 import type { Host } from '../types/api'
 
 export function HostsPage() {
   const { analyzed, effectiveCaptureId, setCaptureId } = useSelectedCapture()
+  const t = useT()
   const [internalFilter, setInternalFilter] = useState<'' | 'true' | 'false'>('')
   const [selectedHost, setSelectedHost] = useState<Host | null>(null)
 
@@ -28,10 +31,13 @@ export function HostsPage() {
   // CSV export of every host matching the current internal/external filter.
   // The hosts endpoint is un-paginated (single request, cap 1000).
   const hostExport = useCsvExport<Host>({
-    label: 'hosts',
+    label: translate('hosts.csv.label'),
     headers: [
-      'IP', 'Hostname', 'Internal', 'Role', 'MAC', 'Bytes Sent', 'Bytes Received',
-      'Packets Sent', 'Packets Received', 'Services', 'First Seen', 'Last Seen',
+      translate('hosts.csv.ip'), translate('hosts.csv.hostname'), translate('hosts.csv.internal'),
+      translate('hosts.csv.role'), translate('hosts.csv.mac'), translate('hosts.csv.bytes_sent'),
+      translate('hosts.csv.bytes_received'), translate('hosts.csv.packets_sent'),
+      translate('hosts.csv.packets_received'), translate('hosts.csv.services'),
+      translate('hosts.csv.first_seen'), translate('hosts.csv.last_seen'),
     ],
     toRow: (h) => [
       h.ip, h.hostname, h.is_internal, h.role, h.mac, h.bytes_sent, h.bytes_received,
@@ -43,17 +49,15 @@ export function HostsPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold text-fg">Hosts</h1>
-      <p className="mt-1 mb-6 text-sm text-fg-subtle">
-        Host-centric investigation — every host with its services, peers, and behavior.
-      </p>
+      <h1 className="text-2xl font-semibold text-fg">{t('hosts.title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-fg-subtle">{t('hosts.subtitle')}</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <CapturePicker captures={analyzed} value={effectiveCaptureId} onChange={setCaptureId} />
         {[
-          { v: '', l: 'All' },
-          { v: 'true', l: 'Internal' },
-          { v: 'false', l: 'External' },
+          { v: '', l: t('hosts.filter.all') },
+          { v: 'true', l: t('hosts.filter.internal') },
+          { v: 'false', l: t('hosts.filter.external') },
         ].map(({ v, l }) => (
           <button
             key={v}
@@ -70,19 +74,19 @@ export function HostsPage() {
         <button
           onClick={hostExport.export}
           disabled={hostExport.isExporting || !effectiveCaptureId || isLoading}
-          aria-label="Export hosts to CSV"
-          title="Export filtered hosts to CSV"
+          aria-label={t('hosts.export_aria')}
+          title={t('hosts.export_title')}
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-fg-muted ring-1 ring-border-strong transition hover:text-fg disabled:pointer-events-none disabled:opacity-50"
         >
           <Download size={12} aria-hidden />
-          {hostExport.isExporting ? 'Exporting…' : 'CSV'}
+          {hostExport.isExporting ? t('common.exporting') : t('common.csv')}
         </button>
       </div>
 
       {!analyzed.length ? (
-        <EmptyState>No analyzed captures yet.</EmptyState>
+        <EmptyState>{t('hosts.empty.no_analyzed')}</EmptyState>
       ) : isLoading ? (
-        <SkeletonStatus label="Profiling hosts…">
+        <SkeletonStatus label={t('hosts.skeleton')}>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3" aria-hidden>
             {Array.from({ length: 6 }, (_, i) => (
               <div
@@ -118,7 +122,7 @@ export function HostsPage() {
       ) : isError ? (
         <ErrorState message={String(error)} onRetry={() => void refetch()} />
       ) : !hosts?.length ? (
-        <EmptyState>No hosts match the current filter.</EmptyState>
+        <EmptyState>{t('hosts.empty.no_filtered')}</EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {hosts.map((h) => (
@@ -133,6 +137,7 @@ export function HostsPage() {
 }
 
 function HostCard({ host, onClick }: { host: Host; onClick: () => void }) {
+  const t = useT()
   const totalBytes = host.bytes_sent + host.bytes_received
   return (
     <button
@@ -150,7 +155,7 @@ function HostCard({ host, onClick }: { host: Host; onClick: () => void }) {
                   : 'bg-info/10 text-info ring-info/30'
               }`}
             >
-              {host.is_internal ? 'internal' : 'external'}
+              {host.is_internal ? t('hosts.card.internal') : t('hosts.card.external')}
             </span>
           </div>
           {host.hostname && (
@@ -166,10 +171,10 @@ function HostCard({ host, onClick }: { host: Host; onClick: () => void }) {
 
       <div className="mt-3 flex gap-4 text-xs text-fg-muted">
         <span>
-          ↑ {formatBytes(host.bytes_sent)} · {host.packets_sent} pkt
+          {t('hosts.card.sent', { bytes: formatBytes(host.bytes_sent), packets: host.packets_sent })}
         </span>
         <span>
-          ↓ {formatBytes(host.bytes_received)} · {host.packets_received} pkt
+          {t('hosts.card.received', { bytes: formatBytes(host.bytes_received), packets: host.packets_received })}
         </span>
       </div>
 
@@ -183,7 +188,7 @@ function HostCard({ host, onClick }: { host: Host; onClick: () => void }) {
           </span>
         ))}
         {host.services.length > 4 && (
-          <span className="text-xs text-fg-subtle">+{host.services.length - 4} more</span>
+          <span className="text-xs text-fg-subtle">{t('common.more', { count: host.services.length - 4 })}</span>
         )}
       </div>
 
@@ -196,21 +201,22 @@ function HostCard({ host, onClick }: { host: Host; onClick: () => void }) {
 }
 
 function HostDetailModal({ host, onClose }: { host: Host; onClose: () => void }) {
+  const t = useT()
   return (
     <Modal
       wide
       title={host.ip}
-      subtitle={`${host.hostname ? `${host.hostname} · ` : ''}${host.role ?? 'no role inferred'} · ${host.mac ?? 'no MAC'}`}
+      subtitle={`${host.hostname ? `${host.hostname} · ` : ''}${host.role ?? translate('hosts.card.no_role')} · ${host.mac ?? translate('hosts.card.no_mac')}`}
       onClose={onClose}
     >
       <div className="space-y-6 p-5">
         {/* Stats */}
         <div className="grid grid-cols-4 gap-3 text-sm">
-          <MiniStat label="Sent" value={formatBytes(host.bytes_sent)} />
-          <MiniStat label="Received" value={formatBytes(host.bytes_received)} />
-          <MiniStat label="Peers" value={host.behavior_summary.unique_peers ?? 0} />
+          <MiniStat label={t('hosts.detail.sent')} value={formatBytes(host.bytes_sent)} />
+          <MiniStat label={t('hosts.detail.received')} value={formatBytes(host.bytes_received)} />
+          <MiniStat label={t('hosts.detail.peers')} value={host.behavior_summary.unique_peers ?? 0} />
           <MiniStat
-            label="Connections"
+            label={t('hosts.detail.connections')}
             value={host.behavior_summary.connections_initiated ?? 0}
           />
         </div>
@@ -218,7 +224,7 @@ function HostDetailModal({ host, onClose }: { host: Host; onClose: () => void })
         {/* Relationship tree (Module A) */}
         {(host.contacted.length > 0 || host.services.length > 0) && (
           <div>
-            <SectionTitle>Relationships</SectionTitle>
+            <SectionTitle>{t('hosts.detail.relationships')}</SectionTitle>
             <div className="rounded-lg bg-bg/60 p-4 font-mono text-xs ring-1 ring-border">
               <div className="text-fg">{host.ip}</div>
               {host.services.slice(0, 8).map((s) => (
@@ -244,7 +250,7 @@ function HostDetailModal({ host, onClose }: { host: Host; onClose: () => void })
 
         {/* Protocol distribution */}
         <div>
-          <SectionTitle>Protocol activity</SectionTitle>
+          <SectionTitle>{t('hosts.detail.protocol_activity')}</SectionTitle>
           <div className="space-y-1.5">
             {Object.entries(host.protocols)
               .sort((a, b) => b[1] - a[1])
