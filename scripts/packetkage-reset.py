@@ -29,6 +29,7 @@ Only the Python standard library is used.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shutil
 import subprocess
 import sys
@@ -172,7 +173,7 @@ def remove_backend_data(args: argparse.Namespace) -> None:
         say(f"  would delete {BACKEND_DATA.relative_to(REPO_ROOT)}/ (setup.json, uploads, sqlite)")
         return
     shutil.rmtree(BACKEND_DATA)
-    ok(f"removed backend/data/ (setup.json, uploads, sqlite)")
+    ok("removed backend/data/ (setup.json, uploads, sqlite)")
 
 
 def remove_test_pcaps(args: argparse.Namespace) -> None:
@@ -193,10 +194,8 @@ def remove_test_pcaps(args: argparse.Namespace) -> None:
     for p in TEST_DATA.iterdir():
         if p.suffix.lower() in (".pcap", ".pcapng"):
             p.unlink()
-    try:
+    with contextlib.suppress(OSError):
         TEST_DATA.rmdir()
-    except OSError:
-        pass
     ok(f"removed {len(removed)} generated PCAP(s)")
 
 

@@ -148,7 +148,6 @@ def safe_spa_file(spa_dir: Path, full_path: str) -> Path | None:
     """Safely resolve an asset path inside spa_dir, defending against traversal."""
     if not full_path or "\0" in full_path or any(ord(c) < 32 for c in full_path):
         return None
-    import unicodedata
 
     # Unicode normalization (NFKC) to collapse fullwidth/homoglyph dots and slashes
     normalized = unicodedata.normalize("NFKC", full_path).replace("\\", "/")

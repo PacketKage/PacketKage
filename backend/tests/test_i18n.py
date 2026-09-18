@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from tests.test_step1 import _analyze_and_wait, _upload
 
-
 # ---------------- translate() catalog rendering ----------------
 
 
@@ -54,7 +53,6 @@ def test_translate_missing_param_keeps_placeholder():
 def test_catalogs_have_identical_keys():
     """en.json and fr.json must stay in key parity (no missing translations)."""
     import json
-
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent / "app" / "i18n"

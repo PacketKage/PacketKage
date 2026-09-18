@@ -9,8 +9,6 @@ from starlette.requests import Request
 from app.auth.rate_limit import (
     RateLimiter,
     _client_ip,
-    rate_limit_callback,
-    rate_limit_login,
 )
 
 
