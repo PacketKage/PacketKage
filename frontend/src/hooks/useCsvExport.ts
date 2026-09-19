@@ -57,7 +57,7 @@ export function useCsvExport<T>(opts: CsvExportOptions<T>) {
         return
       }
       downloadCsv(`${opts.label}-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(opts.headers, rows.map(opts.toRow)))
-      mutateSuccess(translate('csvexport.exported', { count: rows.length }), `export-${opts.label}`)
+      mutateSuccess(translate('csvexport.exported', { count: rows.length, label: opts.label }), `export-${opts.label}`)
     } catch (err) {
       mutateError(translate('csvexport.action'), err, `export-${opts.label}`)
     } finally {

@@ -743,7 +743,7 @@
   "status.failed": "Échec",
   "status.running": "En cours",
   "csvexport.nothing": "Rien à exporter — aucun enregistrement ne correspond aux filtres actuels",
-  "csvexport.exported": "{count} exporté{s} en CSV",
+  "csvexport.exported": "{count} {label} exporté{s} en CSV",
   "csvexport.export": "Export",
   "csvexport.action": "Export",
   "toast.analysis_completed": "Analyse terminée — {packets} paquets",

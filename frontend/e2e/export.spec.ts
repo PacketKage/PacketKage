@@ -7,6 +7,8 @@ import { expect, test } from '@playwright/test'
  */
 test.setTimeout(120_000)
 
+test.describe.serial('CSV export', () => {
+
 test('flows export downloads a CSV with expected headers and rows', async ({ page }) => {
   await page.goto('/')
 
@@ -46,11 +48,11 @@ test('flows export downloads a CSV with expected headers and rows', async ({ pag
   expect(content.split('\r\n').length).toBeGreaterThan(2)
 
   // Success toast with the row count
-  await expect(page.getByText(/Exported \d+ flows/)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText(/Exported \d+ flows to CSV/)).toBeVisible({ timeout: 10_000 })
 })
 
 test('alerts export with a filter matching nothing shows the empty toast', async ({ page }) => {
-  // The flows test (same file, serial worker) analyzed c2_beacon.pcap; wait
+  // The flows test (serial) analyzed c2_beacon.pcap; wait
   // for the picker to offer it before asserting.
   await page.goto('/alerts')
   const exportBtn = page.getByRole('button', { name: 'Export alerts to CSV' })
@@ -66,3 +68,5 @@ test('alerts export with a filter matching nothing shows the empty toast', async
     page.getByText('Nothing to export — no rows match the current filters'),
   ).toBeVisible({ timeout: 10_000 })
 })
+
+});
